@@ -72,17 +72,19 @@ export async function GET(_request: Request, { params }: Params) {
   const bottom = doc.page.height - doc.page.margins.bottom;
 
   // --- Header (centered) — repeated on every page ---
+  // Alias the (now non-null) meeting so the narrowing survives inside this closure.
+  const m = meeting;
   function drawHeader() {
     doc.x = left;
-    doc.font("th-bold").fontSize(18).fillColor("#0f172a").text(meeting.meetingProjectName, { align: "center" });
+    doc.font("th-bold").fontSize(18).fillColor("#0f172a").text(m.meetingProjectName, { align: "center" });
     doc.moveDown(0.2);
-    doc.font("th-bold").fontSize(14).text(meeting.meetingName, { align: "center" });
+    doc.font("th-bold").fontSize(14).text(m.meetingName, { align: "center" });
     doc.moveDown(0.2);
     doc
       .font("th")
       .fontSize(11)
-      .text(`${formatThaiDate(meeting.meetingDate)} เวลา ${meeting.startTime.slice(0, 5)} น.`, { align: "center" });
-    doc.text(`ณ ${meeting.meetingLocation}`, { align: "center" });
+      .text(`${formatThaiDate(m.meetingDate)} เวลา ${m.startTime.slice(0, 5)} น.`, { align: "center" });
+    doc.text(`ณ ${m.meetingLocation}`, { align: "center" });
     doc.moveDown(1);
   }
 

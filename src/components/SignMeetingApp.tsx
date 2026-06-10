@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  BarChart3,
   CheckCircle2,
   ClipboardList,
   CalendarDays,
@@ -1318,10 +1317,9 @@ export function SignMeetingApp() {
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2">
           <SummaryCard icon={<ClipboardList />} label="Meetings" value={meetings.length} tone="cyan" />
           <SummaryCard icon={<Users />} label="Attendance" value={totalAttendance} tone="emerald" />
-          <SummaryCard icon={<BarChart3 />} label="Selected" value={selected?.attendances.length ?? 0} tone="amber" />
         </section>
 
         <section>
