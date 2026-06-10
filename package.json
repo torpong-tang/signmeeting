@@ -6,22 +6,47 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:normalize-local-urls": "node scripts/normalize-local-urls.mjs",
+    "db:normalize-meeting-types": "node scripts/normalize-meeting-types.mjs",
+    "db:backfill-qr-tokens": "node scripts/backfill-qr-tokens.mjs",
+    "smoke:api": "node scripts/smoke-api.mjs",
+    "smoke": "bash scripts/smoke-test.sh",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report playwright-report --host 0.0.0.0 --port 3019"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "@types/pdfkit": "^0.17.6",
+    "clsx": "^2.1.1",
+    "driver.js": "^1.4.0",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^1.17.0",
     "next": "16.2.7",
+    "pdfkit": "^0.19.0",
+    "prisma": "^6.19.0",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^3.6.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "playwright": "^1.60.0",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }

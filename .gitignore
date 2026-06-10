@@ -12,6 +12,13 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/output
+
+# one-off local dev/verification scripts (not part of the app)
+/scripts/render-pdf.mjs
+/scripts/topup-0014.ts
 
 # next.js
 /.next/
@@ -32,6 +39,16 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# local SQLite databases
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+
+# uploaded meeting photos (stored on disk, not in git)
+/uploads
 
 # vercel
 .vercel

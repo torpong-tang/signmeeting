@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Meeting {
+  id                 String       @id @default(cuid())
+  meetingId          String       @unique
+  meetingProjectName String
+  meetingName        String
+  meetingDate        String
+  startTime          String
+  meetingLocation    String
+  meetingType        MeetingType
+  allowLateRegister  Boolean      @default(false)
+  qrTokenInt         String?      @unique
+  qrTokenExt         String?      @unique
+  qrUrlInt           String?
+  qrUrlExt           String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  attendances        Attendance[]
+  photos             MeetingPhoto[]
+}
+
+model Attendance {
+  id         String         @id @default(cuid())
+  personNo   Int
+  meetingId  String
+  channel    AttendanceType
+  intPid     Int?
+  fname      String
+  lname      String
+  department String
+  position   String
+  dedupeKey  String?
+  timestamp  DateTime       @default(now())
+  meeting    Meeting        @relation(fields: [meetingId], references: [meetingId], onDelete: Cascade)
+
+  @@unique([meetingId, personNo])
+  @@unique([meetingId, dedupeKey])
+  @@index([meetingId])
+}
+
+model Config {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model MeetingPhoto {
+  id          String   @id @default(cuid())
+  meetingId   String
+  filename    String
+  mimeType    String
+  size        Int
+  storagePath String?
+  data        String?
+  createdAt   DateTime @default(now())
+  meeting   Meeting  @relation(fields: [meetingId], references: [meetingId], onDelete: Cascade)
+
+  @@index([meetingId])
+}
+
+model InternalPerson {
+  intPid     Int      @id @default(autoincrement())
+  fname      String
+  lname      String
+  department String
+  position   String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum MeetingType {
+  INTERNAL
+  EXTERNAL
+}
+
+enum AttendanceType {
+  INTERNAL
+  EXTERNAL
+}
