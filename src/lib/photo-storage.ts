@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 // Attendee photos are stored on disk under uploads/meetings/<meetingId>/ instead
 // of as base64 blobs in SQLite. Keeps the DB small and payloads light; the files
 // are served back through an authenticated route, never as public static assets.
-const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
+const UPLOAD_ROOT = process.env.SIGNMEETING_UPLOAD_DIR || path.join(process.cwd(), "uploads");
 
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": ".png",

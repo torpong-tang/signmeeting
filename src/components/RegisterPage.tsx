@@ -10,6 +10,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { appPath } from "@/lib/paths";
 
 type Channel = "internal" | "external";
 
@@ -165,8 +166,8 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
       setLoading(true);
       try {
         const [meetingResponse, peopleResponse] = await Promise.all([
-          fetch(`/api/register/${meetingId}/${channel}`),
-          fetch("/api/internal-people"),
+          fetch(appPath(`/api/register/${meetingId}/${channel}`)),
+          fetch(appPath("/api/internal-people")),
         ]);
         if (!meetingResponse.ok) throw new Error("Meeting not found");
         const registerData = (await meetingResponse.json()) as RegisterPayload;
@@ -213,7 +214,7 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
     setSaving(true);
     setError("");
     try {
-      const response = await fetch(`/api/meetings/${meeting.meetingId}/attendance`, {
+      const response = await fetch(appPath(`/api/meetings/${meeting.meetingId}/attendance`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

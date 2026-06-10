@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { appOriginPath } from "@/lib/paths";
 import { randomBytes } from "crypto";
 
 export async function nextMeetingId() {
@@ -123,7 +124,7 @@ export function createRegisterToken() {
 export function buildRegisterUrls(origin: string, meetingId: string, tokens?: { int?: string; ext?: string }) {
   const base = origin.replace("127.0.0.1", "localhost").replace(/\/$/, "");
   return {
-    qrUrlInt: `${base}/register/${tokens?.int ?? meetingId}/internal`,
-    qrUrlExt: `${base}/register/${tokens?.ext ?? meetingId}/external`,
+    qrUrlInt: appOriginPath(base, `/register/${tokens?.int ?? meetingId}/internal`),
+    qrUrlExt: appOriginPath(base, `/register/${tokens?.ext ?? meetingId}/external`),
   };
 }

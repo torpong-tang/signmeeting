@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import "driver.js/dist/driver.css";
+import { appOriginPath, appPath } from "@/lib/paths";
 
 type MeetingType = "INTERNAL" | "EXTERNAL";
 type AttendanceType = "INTERNAL" | "EXTERNAL";
@@ -803,7 +804,7 @@ function LoginPage({
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#164e63_0,#07111f_34%,#020617_100%)] px-4 text-white">
       <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/85 p-6 shadow-2xl">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt="SignMeeting logo" className="mb-6 h-24 w-full rounded-xl object-contain" src="/logosignmeeting1.png" />
+        <img alt="SignMeeting logo" className="mb-6 h-24 w-full rounded-xl object-contain" src={appPath("/logosignmeeting1.png")} />
         <div className="mb-6">
           <h1 className="text-3xl font-extrabold">Admin Login</h1>
           <p className="text-slate-300">SignMeeting administration</p>
@@ -1013,7 +1014,7 @@ export function SignMeetingApp() {
   async function loadMeetings() {
     setLoading(true);
     try {
-      const response = await fetch("/api/meetings");
+      const response = await fetch(appPath("/api/meetings"));
       const data = (await response.json()) as Meeting[];
       setMeetings(data);
       if (!selectedId && data[0]) setSelectedId(data[0].meetingId);
@@ -1024,8 +1025,8 @@ export function SignMeetingApp() {
 
   async function loadSettings() {
     const [configResponse, peopleResponse] = await Promise.all([
-      fetch("/api/config"),
-      fetch("/api/internal-people"),
+      fetch(appPath("/api/config")),
+      fetch(appPath("/api/internal-people")),
     ]);
     setConfig((await configResponse.json()) as ConfigValues);
     setPeople((await peopleResponse.json()) as InternalPerson[]);
@@ -1034,7 +1035,7 @@ export function SignMeetingApp() {
   // Determine login state from the server session cookie (no more trusting a
   // client-side localStorage flag).
   useEffect(() => {
-    fetch("/api/auth/session")
+    fetch(appPath("/api/auth/session"))
       .then((response) => response.json())
       .then((data: { authenticated?: boolean }) => setIsAdmin(Boolean(data.authenticated)))
       .catch(() => setIsAdmin(false))
@@ -1106,7 +1107,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch(editingId ? `/api/meetings/${editingId}` : "/api/meetings", {
+          const response = await fetch(appPath(editingId ? `/api/meetings/${editingId}` : "/api/meetings"), {
             method: editingId ? "PUT" : "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(form),
@@ -1135,7 +1136,7 @@ export function SignMeetingApp() {
     Array.from(files).forEach((file) => formData.append("files", file));
     setLoading(true);
     try {
-      const response = await fetch(`/api/meetings/${meetingId}/photos`, {
+      const response = await fetch(appPath(`/api/meetings/${meetingId}/photos`), {
         method: "POST",
         body: formData,
       });
@@ -1159,7 +1160,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(`/api/meetings/${meetingId}/photos/${photo.id}`, { method: "DELETE" });
+          await fetch(appPath(`/api/meetings/${meetingId}/photos/${photo.id}`), { method: "DELETE" });
           await loadMeetings();
           setAlert("ลบรูปเรียบร้อยแล้ว");
         } finally {
@@ -1176,7 +1177,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch("/api/config", {
+          const response = await fetch(appPath("/api/config"), {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(config),
@@ -1212,7 +1213,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(editingPersonId ? `/api/internal-people/${editingPersonId}` : "/api/internal-people", {
+          await fetch(appPath(editingPersonId ? `/api/internal-people/${editingPersonId}` : "/api/internal-people"), {
             method: editingPersonId ? "PUT" : "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(personForm),
@@ -1235,7 +1236,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(`/api/internal-people/${person.intPid}`, { method: "DELETE" });
+          await fetch(appPath(`/api/internal-people/${person.intPid}`), { method: "DELETE" });
           if (editingPersonId === person.intPid) {
             setEditingPersonId(null);
             setPersonForm(emptyPerson);
@@ -1256,7 +1257,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(`/api/meetings/${meeting.meetingId}`, { method: "DELETE" });
+          await fetch(appPath(`/api/meetings/${meeting.meetingId}`), { method: "DELETE" });
           setAlert(`ลบ ${meeting.meetingId} แล้ว`);
           setSelectedId("");
           await loadMeetings();
@@ -1273,7 +1274,7 @@ export function SignMeetingApp() {
     const extension = kind === "excel" ? "xlsx" : "pdf";
     const endpoint = kind === "excel" ? "export" : "export-pdf";
     const link = document.createElement("a");
-    link.href = `/api/meetings/${meeting.meetingId}/${endpoint}`;
+    link.href = appPath(`/api/meetings/${meeting.meetingId}/${endpoint}`);
     link.download = `${meeting.meetingId}-attendance.${extension}`;
     document.body.appendChild(link);
     link.click();
@@ -1285,7 +1286,7 @@ export function SignMeetingApp() {
   const selectedQrItems = useMemo(() => {
     if (!selected) return [];
     const registerUrl = (token: string | null, channel: "internal" | "external", fallback: string | null) =>
-      token && origin ? `${origin}/register/${token}/${channel}` : fallback;
+      token && origin ? appOriginPath(origin, `/register/${token}/${channel}`) : fallback;
     const items: QrItem[] = [];
     const intUrl = registerUrl(selected.qrTokenInt, "internal", selected.qrUrlInt);
     if (intUrl) {
@@ -1346,7 +1347,7 @@ export function SignMeetingApp() {
         error={loginError}
         onLogin={async (username, password) => {
           try {
-            const response = await fetch("/api/auth/login", {
+            const response = await fetch(appPath("/api/auth/login"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ username, password }),
@@ -1397,7 +1398,7 @@ export function SignMeetingApp() {
         <header className="flex flex-col gap-4 border-b border-slate-700 pb-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt="SignMeeting" className="h-20 w-auto rounded-xl object-contain md:h-24" src="/logosignmeeting1.png" />
+            <img alt="SignMeeting" className="h-20 w-auto rounded-xl object-contain md:h-24" src={appPath("/logosignmeeting1.png")} />
           </div>
           <div className="flex flex-wrap gap-2">
             <button id="guidedTourButton" className={buttonTone("preview")} onClick={startAdminTour} type="button">
@@ -1406,7 +1407,7 @@ export function SignMeetingApp() {
             <button
               className={buttonTone("muted")}
               onClick={async () => {
-                await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+                await fetch(appPath("/api/auth/logout"), { method: "POST" }).catch(() => {});
                 setIsAdmin(false);
               }}
               type="button"
@@ -1916,7 +1917,7 @@ function MeetingFormFields({
                   <img
                     alt={photo.filename}
                     className="h-16 w-16 rounded-lg object-cover"
-                    src={`/api/meetings/${editingId}/photos/${photo.id}`}
+                    src={appPath(`/api/meetings/${editingId}/photos/${photo.id}`)}
                   />
                 ) : (
                   <div className="grid h-16 w-16 place-items-center rounded-lg bg-slate-800 text-amber-300">
@@ -2100,4 +2101,3 @@ function AttendanceTable({ rows }: { rows: Attendance[] }) {
     </div>
   );
 }
-
