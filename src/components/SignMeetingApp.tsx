@@ -889,15 +889,117 @@ export function SignMeetingApp() {
     const { driver } = await import("driver.js");
     const tour = driver({
       showProgress: true,
-      nextBtnText: "Next",
-      prevBtnText: "Back",
-      doneBtnText: "Done",
+      progressText: "ขั้นที่ {{current}} / {{total}}",
+      nextBtnText: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+      prevBtnText: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`,
+      doneBtnText: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+      popoverClass: "sm-tour",
       steps: [
-        { element: "#createMeetingButton", popover: { title: "Create Meeting", description: "สร้างการประชุมใหม่ พร้อม QR สำหรับลงทะเบียน" } },
-        { element: "#meetingsTable", popover: { title: "Meetings", description: "ค้นหา จัดเรียง เลือกประชุมเดิม แก้ไข ลบ หรือเรียกซ้ำประชุม" } },
-        { element: "#qrAttendanceSection", popover: { title: "QR & Attendance", description: "แสดง QR และรายชื่อผู้ลงทะเบียนตาม Meeting ID" } },
-        { element: "#settingsSection", popover: { title: "Settings", description: "กำหนด running number และเวลาปิดรับลงทะเบียน" } },
-        { element: "#personnelSection", popover: { title: "Internal Personnel", description: "จัดการรายชื่อบุคลากรภายในสำหรับ dropdown ในหน้า QR" } },
+        {
+          popover: {
+            popoverClass: "sm-tour sm-tour-welcome",
+            title: "👋 ยินดีต้อนรับสู่ SignMeeting",
+            description: `
+              <p class="sm-lead">ระบบลงทะเบียนเข้าร่วมประชุมด้วย QR Code ครบวงจร</p>
+              <p>ทัวร์สั้น ๆ นี้จะพาคุณรู้จักทุกส่วนของหน้าผู้ดูแลระบบใน <b>7 ขั้นตอน</b> ใช้เวลาไม่ถึง 1 นาที</p>
+              <ul class="sm-list">
+                <li>🗂️ สร้างและจัดการการประชุม</li>
+                <li>📱 สร้าง QR ให้ผู้เข้าร่วมสแกนลงทะเบียน</li>
+                <li>📊 ติดตามและส่งออกรายชื่อเป็น Excel / PDF</li>
+              </ul>
+              <p class="sm-tip">💡 กดปุ่ม <b>Guided Tour</b> เมื่อไรก็ได้เพื่อดูทัวร์นี้อีกครั้ง</p>
+            `,
+          },
+        },
+        {
+          element: "#summaryCards",
+          popover: {
+            popoverClass: "sm-tour sm-tour-cyan",
+            title: "📊 ภาพรวมแบบเร็ว",
+            description: `
+              <p>การ์ดสรุปบอกสถานะระบบในพริบตา</p>
+              <ul class="sm-list">
+                <li><span class="sm-chip sm-chip-cyan">Meetings</span> จำนวนการประชุมทั้งหมดในระบบ</li>
+                <li><span class="sm-chip sm-chip-emerald">Attendance</span> ยอดผู้เข้าร่วมรวมทุกการประชุม</li>
+              </ul>
+              <p class="sm-tip">ตัวเลขอัปเดตอัตโนมัติทุกครั้งที่มีคนลงทะเบียนใหม่</p>
+            `,
+          },
+        },
+        {
+          element: "#createMeetingButton",
+          popover: {
+            popoverClass: "sm-tour sm-tour-amber",
+            title: "➕ สร้างการประชุมใหม่",
+            description: `
+              <p>เริ่มต้นที่นี่ ระบบจะออก <b>Meeting ID</b> และสร้าง <b>QR Code</b> ให้อัตโนมัติ</p>
+              <ul class="sm-list">
+                <li>📝 กรอกชื่อโครงการ ชื่อการประชุม วัน-เวลา และสถานที่</li>
+                <li>🔀 เลือกประเภท <b>ภายใน</b> หรือ <b>ภายนอก</b></li>
+                <li>⏱️ เปิด/ปิดการลงทะเบียนล่าช้าได้</li>
+              </ul>
+            `,
+          },
+        },
+        {
+          element: "#meetingsTable",
+          popover: {
+            popoverClass: "sm-tour sm-tour-violet",
+            title: "🗂️ ตารางการประชุม",
+            description: `
+              <p>ศูนย์รวมการจัดการการประชุมทั้งหมด</p>
+              <ul class="sm-list">
+                <li>🔎 <b>ค้นหาสด</b> และคลิกหัวคอลัมน์เพื่อ <b>จัดเรียง</b></li>
+                <li>👆 คลิกแถวเพื่อ <b>เลือก</b> ดู QR และรายชื่อด้านล่าง</li>
+                <li>✏️ <b>แก้ไข</b> · 🗑️ <b>ลบ</b> · 🔁 <b>เรียกซ้ำ</b> การประชุมเดิม</li>
+              </ul>
+            `,
+          },
+        },
+        {
+          element: "#qrAttendanceSection",
+          popover: {
+            popoverClass: "sm-tour sm-tour-emerald",
+            title: "📱 QR Code & รายชื่อผู้เข้าร่วม",
+            description: `
+              <p>หัวใจของระบบ — ฉายให้ผู้เข้าร่วมสแกนลงทะเบียนได้ทันที</p>
+              <ul class="sm-list">
+                <li>🖼️ แสดง QR แยกช่องทาง <b>ภายใน / ภายนอก</b></li>
+                <li>🔄 ปุ่ม Refresh เพื่อดึงรายชื่อล่าสุด</li>
+                <li>📥 ส่งออกเป็น <b>Excel</b> หรือ <b>PDF</b> (ฟอนต์ไทยราชการ)</li>
+              </ul>
+            `,
+          },
+        },
+        {
+          element: "#settingsSection",
+          popover: {
+            popoverClass: "sm-tour sm-tour-rose",
+            title: "⚙️ ตั้งค่าระบบ",
+            description: `
+              <p>ปรับพฤติกรรมการลงทะเบียนให้เหมาะกับงานของคุณ</p>
+              <ul class="sm-list">
+                <li>🔢 กำหนด <b>running number</b> เริ่มต้นของ Meeting ID</li>
+                <li>⏰ ตั้ง <b>เวลาปิดรับลงทะเบียน</b> หลังเริ่มประชุม</li>
+              </ul>
+            `,
+          },
+        },
+        {
+          element: "#personnelSection",
+          popover: {
+            popoverClass: "sm-tour sm-tour-indigo",
+            title: "👥 บุคลากรภายใน",
+            description: `
+              <p>จัดการทะเบียนรายชื่อพนักงานไว้ล่วงหน้า</p>
+              <ul class="sm-list">
+                <li>➕ เพิ่ม/แก้ไขชื่อ หน่วยงาน และตำแหน่ง</li>
+                <li>⚡ ผู้เข้าร่วมเลือกชื่อจาก <b>dropdown</b> ได้เลย ไม่ต้องพิมพ์เอง</li>
+              </ul>
+              <p class="sm-tip">🎯 จบแล้ว! พร้อมเริ่มสร้างการประชุมแรกของคุณหรือยัง?</p>
+            `,
+          },
+        },
       ],
     });
     tour.drive();
@@ -1298,7 +1400,7 @@ export function SignMeetingApp() {
             <img alt="SignMeeting" className="h-20 w-auto rounded-xl object-contain md:h-24" src="/logosignmeeting1.png" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className={buttonTone("preview")} onClick={startAdminTour} type="button">
+            <button id="guidedTourButton" className={buttonTone("preview")} onClick={startAdminTour} type="button">
               <ShieldCheck className="h-5 w-5" /> Guided Tour
             </button>
             <button
@@ -1317,7 +1419,7 @@ export function SignMeetingApp() {
           </div>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-2">
+        <section id="summaryCards" className="grid gap-4 md:grid-cols-2">
           <SummaryCard icon={<ClipboardList />} label="Meetings" value={meetings.length} tone="cyan" />
           <SummaryCard icon={<Users />} label="Attendance" value={totalAttendance} tone="emerald" />
         </section>
