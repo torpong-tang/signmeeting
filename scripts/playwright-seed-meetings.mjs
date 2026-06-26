@@ -45,13 +45,18 @@ for (let i = 1; i <= 5; i += 1) {
   const qrTokenExt = createToken();
   const date = new Date(Date.now() + (i + 2) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+  const startTime = `${String(8 + i).padStart(2, "0")}:30`;
+
   await prisma.meeting.create({
     data: {
       meetingId,
       meetingProjectName: `Playwright Browser Test Project ${i}`,
       meetingName: `Playwright Browser QA Meeting ${i}`,
       meetingDate: date,
-      startTime: `${String(8 + i).padStart(2, "0")}:30`,
+      startTime,
+      endTime: `${String(9 + i).padStart(2, "0")}:30`,
+      internalMeetingName: "Smarterware",
+      externalMeetingName: `Partner Group ${i}`,
       meetingLocation: `Browser Test Meeting Room ${i}`,
       meetingType: "EXTERNAL",
       allowLateRegister: false,

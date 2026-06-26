@@ -42,7 +42,18 @@ function formatThaiDate(value: string) {
 }
 
 type Column = { label: string; width: number; align: "left" | "center"; value: (row: Row) => string };
-type Row = { personNo: number; fname: string; lname: string; department: string; position: string };
+type Row = { displayNo: number; fname: string; lname: string; department: string; position: string };
+
+function formatTimeRange(startTime: string, endTime?: string | null) {
+  const start = startTime.slice(0, 5);
+  const end = String(endTime ?? "").slice(0, 5);
+  return end ? `${start}-${end}` : start;
+}
+
+function groupNameLabel(label: string, name?: string | null) {
+  const clean = String(name ?? "").trim();
+  return clean ? `${label} (${clean})` : label;
+}
 
 export async function GET(_request: Request, { params }: Params) {
   const denied = await requireAuth();
@@ -83,7 +94,7 @@ export async function GET(_request: Request, { params }: Params) {
     doc
       .font("th")
       .fontSize(11)
-      .text(`${formatThaiDate(m.meetingDate)} เวลา ${m.startTime.slice(0, 5)} น.`, { align: "center" });
+      .text(`${formatThaiDate(m.meetingDate)} เวลา ${formatTimeRange(m.startTime, m.endTime)} น.`, { align: "center" });
     doc.text(`ณ ${m.meetingLocation}`, { align: "center" });
     doc.moveDown(1);
   }
@@ -92,7 +103,7 @@ export async function GET(_request: Request, { params }: Params) {
 
   // --- Table ---
   const columns: Column[] = [
-    { label: "ลำดับ", width: 50, align: "center", value: (row) => String(row.personNo) },
+    { label: "ลำดับ", width: 50, align: "center", value: (row) => String(row.displayNo) },
     { label: "ชื่อ-นามสกุล", width: 175, align: "left", value: (row) => `${row.fname} ${row.lname}` },
     { label: "หน่วยงาน/สังกัด", width: 160, align: "left", value: (row) => row.department },
     { label: "ตำแหน่ง", width: contentWidth - 385, align: "left", value: (row) => row.position },
@@ -137,15 +148,58 @@ export async function GET(_request: Request, { params }: Params) {
     doc.x = left;
   }
 
-  drawRow(columns.map((column) => column.label), { header: true });
+  function drawGroupTitleRow(title: string, count: number) {
+    const rowHeight = 24;
+    if (doc.y + rowHeight > bottom) {
+      doc.addPage();
+      drawHeader();
+      drawRow(columns.map((column) => column.label), { header: true });
+    }
+    const y = doc.y;
+    doc.save();
+    doc.rect(left, y, contentWidth, rowHeight).fill("#e0f2fe");
+    doc.restore();
+    doc.rect(left, y, contentWidth, rowHeight).strokeColor("#94a3b8").lineWidth(0.5).stroke();
+    doc
+      .font("th-bold")
+      .fontSize(12)
+      .fillColor("#0f172a")
+      .text(`${title}  จำนวน ${count} คน`, left + padding, y + 5, { width: contentWidth - padding * 2 });
+    doc.y = y + rowHeight;
+    doc.x = left;
+  }
+
   if (meeting.attendances.length === 0) {
+    drawRow(columns.map((column) => column.label), { header: true });
     doc.font("th").fontSize(10).fillColor("#94a3b8").text("ยังไม่มีผู้ลงทะเบียน", left, doc.y + 8, {
       width: contentWidth,
       align: "center",
     });
   } else {
-    meeting.attendances.forEach((row) => {
-      drawRow(columns.map((column) => column.value(row)), {});
+    const groups = [
+      {
+        title: groupNameLabel("สำหรับผู้ร่วมประชุม", meeting.externalMeetingName),
+        rows: meeting.attendances.filter((row) => row.channel === "EXTERNAL"),
+      },
+      {
+        title: groupNameLabel("สำหรับผู้ปฏิบัติงาน", meeting.internalMeetingName),
+        rows: meeting.attendances.filter((row) => row.channel === "INTERNAL"),
+      },
+    ].filter((group) => group.rows.length > 0);
+
+    groups.forEach((group, groupIndex) => {
+      if (groupIndex === 0) {
+        drawRow(columns.map((column) => column.label), { header: true });
+      } else if (doc.y + 48 > bottom) {
+        doc.addPage();
+        drawHeader();
+        drawRow(columns.map((column) => column.label), { header: true });
+      }
+      drawGroupTitleRow(group.title, group.rows.length);
+      group.rows.forEach((attendance, index) => {
+        const row = { ...attendance, displayNo: index + 1 };
+        drawRow(columns.map((column) => column.value(row)), {});
+      });
     });
   }
 

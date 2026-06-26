@@ -30,6 +30,17 @@ function formatThaiDateTime(iso: string | Date) {
   return `${get("day")}/${get("month")}/${Number(get("year")) + 543} ${get("hour")}:${get("minute")}`;
 }
 
+function formatTimeRange(startTime: string, endTime?: string | null) {
+  const start = startTime.slice(0, 5);
+  const end = String(endTime ?? "").slice(0, 5);
+  return end ? `${start}-${end}` : start;
+}
+
+function groupNameLabel(label: string, name?: string | null) {
+  const clean = String(name ?? "").trim();
+  return clean ? `${label} (${clean})` : label;
+}
+
 export async function GET(_request: Request, { params }: Params) {
   const denied = await requireAuth();
   if (denied) return denied;
@@ -67,8 +78,11 @@ export async function GET(_request: Request, { params }: Params) {
     { width: 20 },
   ];
 
-  const typeLabel = meeting.meetingType === "INTERNAL" ? "ประชุมภายใน" : "ประชุมภายนอก";
-  const dateLine = `วันที่ ${formatThaiDate(meeting.meetingDate)} เวลา ${meeting.startTime.slice(0, 5)} น.`;
+  const typeLabel =
+    meeting.meetingType === "INTERNAL"
+      ? groupNameLabel("สำหรับผู้ปฏิบัติงาน", meeting.internalMeetingName)
+      : `${groupNameLabel("สำหรับผู้ปฏิบัติงาน", meeting.internalMeetingName)} / ${groupNameLabel("สำหรับผู้ร่วมประชุม", meeting.externalMeetingName)}`;
+  const dateLine = `วันที่ ${formatThaiDate(meeting.meetingDate)} เวลา ${formatTimeRange(meeting.startTime, meeting.endTime)} น.`;
 
   // --- Header block (merged across all columns) ---
   type HeaderLine = { text: string; size: number; bold?: boolean; color?: string };

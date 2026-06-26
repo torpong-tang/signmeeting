@@ -12,6 +12,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:normalize-local-urls": "node scripts/normalize-local-urls.mjs",
     "db:normalize-meeting-types": "node scripts/normalize-meeting-types.mjs",
+    "db:backfill-end-times": "node scripts/backfill-meeting-end-times.mjs",
     "db:backfill-qr-tokens": "node scripts/backfill-qr-tokens.mjs",
     "smoke:api": "node scripts/smoke-api.mjs",
     "smoke": "bash scripts/smoke-test.sh",

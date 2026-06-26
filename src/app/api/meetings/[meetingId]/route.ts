@@ -5,17 +5,34 @@ import { deleteMeetingPhotoDir } from "@/lib/photo-storage";
 
 type Params = { params: Promise<{ meetingId: string }> };
 
+function defaultEndTime(startTime: string) {
+  const [hourText, minuteText] = startTime.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return "";
+  const date = new Date(Date.UTC(2000, 0, 1, hour, minute));
+  date.setUTCHours(date.getUTCHours() + 1);
+  if (date.getUTCDate() !== 1) return "23:59";
+  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 function normalizeMeetingBody(body: Record<string, unknown>) {
   const meetingProjectName = String(body.meetingProjectName ?? "").trim();
   const meetingName = String(body.meetingName ?? "").trim();
   const meetingDate = String(body.meetingDate ?? "").trim();
   const startTime = String(body.startTime ?? "").trim();
+  const endTime = String(body.endTime ?? "").trim() || defaultEndTime(startTime);
   const meetingLocation = String(body.meetingLocation ?? "").trim();
   const meetingType = String(body.meetingType ?? "EXTERNAL");
-  if (!meetingProjectName || !meetingName || !meetingDate || !startTime || !meetingLocation) {
+  const internalMeetingName = String(body.internalMeetingName ?? "Smarterware").trim() || "Smarterware";
+  const externalMeetingName = String(body.externalMeetingName ?? "").trim();
+  if (!meetingProjectName || !meetingName || !meetingDate || !startTime || !endTime || !meetingLocation) {
     return { error: "All meeting fields are required." };
   }
-  return { meetingProjectName, meetingName, meetingDate, startTime, meetingLocation, meetingType };
+  if (endTime <= startTime) {
+    return { error: "End Time must be later than Start Time." };
+  }
+  return { meetingProjectName, meetingName, meetingDate, startTime, endTime, meetingLocation, meetingType, internalMeetingName, externalMeetingName };
 }
 
 export async function GET(_request: Request, { params }: Params) {
@@ -50,7 +67,10 @@ export async function PUT(request: Request, { params }: Params) {
       meetingName: normalized.meetingName,
       meetingDate: normalized.meetingDate,
       startTime: normalized.startTime,
+      endTime: normalized.endTime,
       meetingLocation: normalized.meetingLocation,
+      internalMeetingName: normalized.internalMeetingName,
+      externalMeetingName: normalized.meetingType === "EXTERNAL" ? normalized.externalMeetingName : null,
       allowLateRegister: Boolean(body.allowLateRegister ?? false),
     },
     include: {

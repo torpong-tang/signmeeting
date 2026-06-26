@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: Params) {
   }
   const channel = body.channel === AttendanceType.INTERNAL ? AttendanceType.INTERNAL : AttendanceType.EXTERNAL;
   if (meeting.meetingType === MeetingType.INTERNAL && channel === AttendanceType.EXTERNAL) {
-    return NextResponse.json({ message: "External registration is not available for this meeting" }, { status: 403 });
+    return NextResponse.json({ message: "ไม่เปิดลงทะเบียนสำหรับผู้ร่วมประชุมในรายการประชุมนี้" }, { status: 403 });
   }
 
   const config = await prisma.config.findUnique({ where: { key: "close_time" } });

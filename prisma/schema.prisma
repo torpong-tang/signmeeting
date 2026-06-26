@@ -8,23 +8,34 @@ datasource db {
 }
 
 model Meeting {
-  id                 String       @id @default(cuid())
-  meetingId          String       @unique
-  meetingProjectName String
-  meetingName        String
-  meetingDate        String
-  startTime          String
-  meetingLocation    String
-  meetingType        MeetingType
-  allowLateRegister  Boolean      @default(false)
-  qrTokenInt         String?      @unique
-  qrTokenExt         String?      @unique
-  qrUrlInt           String?
-  qrUrlExt           String?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  attendances        Attendance[]
-  photos             MeetingPhoto[]
+  id                  String         @id @default(cuid())
+  meetingId           String         @unique
+  meetingProjectName  String
+  meetingName         String
+  meetingDate         String
+  startTime           String
+  endTime             String         @default("10:00")
+  meetingLocation     String
+  meetingType         MeetingType
+  internalMeetingName String         @default("Smarterware")
+  externalMeetingName String?
+  internalGroupImageFilename String?
+  internalGroupImageMime     String?
+  internalGroupImageSize     Int?
+  internalGroupImagePath     String?
+  externalGroupImageFilename String?
+  externalGroupImageMime     String?
+  externalGroupImageSize     Int?
+  externalGroupImagePath     String?
+  allowLateRegister   Boolean        @default(false)
+  qrTokenInt          String?        @unique
+  qrTokenExt          String?        @unique
+  qrUrlInt            String?
+  qrUrlExt            String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  attendances         Attendance[]
+  photos              MeetingPhoto[]
 }
 
 model Attendance {
@@ -62,7 +73,7 @@ model MeetingPhoto {
   storagePath String?
   data        String?
   createdAt   DateTime @default(now())
-  meeting   Meeting  @relation(fields: [meetingId], references: [meetingId], onDelete: Cascade)
+  meeting     Meeting  @relation(fields: [meetingId], references: [meetingId], onDelete: Cascade)
 
   @@index([meetingId])
 }

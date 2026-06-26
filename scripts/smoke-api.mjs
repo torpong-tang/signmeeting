@@ -1,10 +1,29 @@
 const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:3009";
 const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    username: process.env.ADMIN_USERNAME ?? "admin",
+    password: process.env.ADMIN_PASSWORD ?? "signmeeting",
+  }),
+});
+
+if (!loginResponse.ok) {
+  throw new Error(`Login failed: ${loginResponse.status} ${await loginResponse.text()}`);
+}
+
+const cookie = loginResponse.headers.get("set-cookie")?.split(";")[0];
+if (!cookie) {
+  throw new Error("Login did not return a session cookie.");
+}
+
 const createdResponse = await fetch(`${baseUrl}/api/meetings`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
+    Cookie: cookie,
     Origin: baseUrl.replace("127.0.0.1", "localhost"),
   },
   body: JSON.stringify({
@@ -12,8 +31,11 @@ const createdResponse = await fetch(`${baseUrl}/api/meetings`, {
     meetingName: "Kickoff Meeting",
     meetingDate: tomorrow,
     startTime: "09:00",
+    endTime: "10:00",
     meetingLocation: "Meeting Room A",
     meetingType: "EXTERNAL",
+    internalMeetingName: "Smarterware",
+    externalMeetingName: "Vendor Team",
   }),
 });
 

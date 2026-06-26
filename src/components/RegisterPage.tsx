@@ -20,8 +20,11 @@ type Meeting = {
   meetingName: string;
   meetingDate: string;
   startTime: string;
+  endTime: string;
   meetingLocation: string;
   meetingType: "INTERNAL" | "EXTERNAL";
+  internalMeetingName: string;
+  externalMeetingName: string | null;
   attendances?: { intPid: number | null }[];
 };
 
@@ -56,6 +59,18 @@ function formatThaiDate(value: string) {
 function formatTime24(value: string) {
   if (!value) return "-";
   return value.slice(0, 5);
+}
+
+function formatTimeRange(startTime: string, endTime?: string | null) {
+  const start = formatTime24(startTime);
+  const end = formatTime24(endTime ?? "");
+  return end && end !== "-" ? `${start}-${end}` : start;
+}
+
+function channelGroupName(meeting: Meeting, channel: Channel) {
+  return channel === "internal"
+    ? meeting.internalMeetingName || "Smarterware"
+    : meeting.externalMeetingName || "";
 }
 
 // Searchable single-control dropdown for picking internal personnel: type to
@@ -97,7 +112,7 @@ function PersonCombobox({
         <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input
           className={`${inputBase} pl-10`}
-          placeholder="พิมพ์เพื่อค้นหาและเลือกบุคลากร..."
+        placeholder="พิมพ์เพื่อค้นหาและเลือกผู้ปฏิบัติงาน..."
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -321,7 +336,7 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
           </div>
           <div>
             <h1 className="text-3xl font-extrabold">SignMeeting</h1>
-            <p className="text-slate-300">{channel === "internal" ? "Internal registration" : "External registration"}</p>
+            <p className="text-slate-300">{channel === "internal" ? "ลงทะเบียนผู้ปฏิบัติงาน" : "ลงทะเบียนผู้ร่วมประชุม"}</p>
           </div>
         </div>
 
@@ -330,7 +345,7 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
             <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-5 text-rose-100">
               <h2 className="mb-2 text-2xl font-bold">หมดเวลาลงทะเบียน</h2>
               <p>{closedMessage}</p>
-              <p className="mt-3 text-slate-300">{meeting.meetingName} • {formatThaiDate(meeting.meetingDate)} เวลา {formatTime24(meeting.startTime)}</p>
+              <p className="mt-3 text-slate-300">{meeting.meetingName} • {formatThaiDate(meeting.meetingDate)} เวลา {formatTimeRange(meeting.startTime, meeting.endTime)}</p>
               <button className={`${buttonBase} mt-5 w-full bg-slate-700 text-white hover:bg-slate-600`} onClick={closePage} type="button">
                 <X className="h-5 w-5" /> ปิด
               </button>
@@ -341,8 +356,13 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
                 <p className="text-sm font-semibold text-emerald-200">{meeting.meetingId}</p>
                 <h2 className="mt-1 text-2xl font-bold">{meeting.meetingName}</h2>
                 <p className="mt-1 text-slate-300">{meeting.meetingProjectName}</p>
+                {channelGroupName(meeting, channel) && (
+                  <p className="mt-1 text-sm font-semibold text-emerald-200">
+                    {channel === "internal" ? "สำหรับผู้ปฏิบัติงาน" : "สำหรับผู้ร่วมประชุม"} ({channelGroupName(meeting, channel)})
+                  </p>
+                )}
                 <p className="mt-2 text-sm text-slate-300">
-                  {formatThaiDate(meeting.meetingDate)} เวลา {formatTime24(meeting.startTime)} • {meeting.meetingLocation}
+                  {formatThaiDate(meeting.meetingDate)} เวลา {formatTimeRange(meeting.startTime, meeting.endTime)} • {meeting.meetingLocation}
                 </p>
               </div>
 
