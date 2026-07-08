@@ -80,8 +80,8 @@ export async function GET(_request: Request, { params }: Params) {
 
   const typeLabel =
     meeting.meetingType === "INTERNAL"
-      ? groupNameLabel("สำหรับผู้ปฏิบัติงาน", meeting.internalMeetingName)
-      : `${groupNameLabel("สำหรับผู้ปฏิบัติงาน", meeting.internalMeetingName)} / ${groupNameLabel("สำหรับผู้ร่วมประชุม", meeting.externalMeetingName)}`;
+      ? groupNameLabel("สำหรับบริษัทฯ", meeting.internalMeetingName)
+      : `${groupNameLabel("สำหรับบริษัทฯ", meeting.internalMeetingName)} / ${groupNameLabel("สำหรับผู้ร่วมประชุม", meeting.externalMeetingName)}`;
   const dateLine = `วันที่ ${formatThaiDate(meeting.meetingDate)} เวลา ${formatTimeRange(meeting.startTime, meeting.endTime)} น.`;
 
   // --- Header block (merged across all columns) ---

@@ -547,7 +547,7 @@ function QrPanel({ items, meeting }: { items: QrItem[]; meeting: Meeting }) {
       dateLine: `${formatThaiLongDate(meeting.meetingDate)} เวลา ${formatTimeRange(meeting.startTime, meeting.endTime)} น.`,
       locationLine: `ณ ${meeting.meetingLocation}`,
       location: meeting.meetingLocation,
-      type: meeting.meetingType === "INTERNAL" ? "สำหรับผู้ปฏิบัติงาน" : "สำหรับผู้ร่วมประชุม",
+      type: meeting.meetingType === "INTERNAL" ? "สำหรับบริษัทฯ" : "สำหรับผู้ร่วมประชุม",
       items: items.map((item) => ({ ...item, groupImage: groupImages[item.url] ?? "", image: images[item.url] ?? "" })),
     };
     const html = `<!doctype html>
@@ -1512,8 +1512,8 @@ export function SignMeetingApp() {
           ? appOriginPath(origin, `/api/meetings/${selected.meetingId}/group-images/internal`)
           : undefined;
       items.push({
-        title: groupNameLabel("สำหรับผู้ปฏิบัติงาน", groupName),
-        label: "สำหรับผู้ปฏิบัติงาน",
+        title: groupNameLabel("สำหรับบริษัทฯ", groupName),
+        label: "สำหรับบริษัทฯ",
         groupName,
         groupImageUrl,
         url: intUrl,
@@ -1924,8 +1924,8 @@ export function SignMeetingApp() {
                 <p>{formatThaiDate(selected.meetingDate)} เวลา {formatTimeRange(selected.startTime, selected.endTime)}</p>
                 <p>
                   {selected.meetingType === "INTERNAL"
-                    ? groupNameLabel("สำหรับผู้ปฏิบัติงาน", selected.internalMeetingName)
-                    : `${groupNameLabel("สำหรับผู้ปฏิบัติงาน", selected.internalMeetingName)} / ${groupNameLabel("สำหรับผู้ร่วมประชุม", selected.externalMeetingName)}`}
+                    ? groupNameLabel("สำหรับบริษัทฯ", selected.internalMeetingName)
+                    : `${groupNameLabel("สำหรับบริษัทฯ", selected.internalMeetingName)} / ${groupNameLabel("สำหรับผู้ร่วมประชุม", selected.externalMeetingName)}`}
                 </p>
               </div>
             </div>
@@ -2151,7 +2151,7 @@ function MeetingFormFields({
                 onChange={() => onChange({ ...form, meetingType: type })}
                 type="radio"
               />
-              {type === "INTERNAL" ? "สำหรับผู้ปฏิบัติงาน" : "สำหรับผู้ร่วมประชุม"}
+              {type === "INTERNAL" ? "สำหรับบริษัทฯ" : "สำหรับผู้ร่วมประชุม"}
             </label>
           ))}
         </div>

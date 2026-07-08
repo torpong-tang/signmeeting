@@ -358,7 +358,7 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
                 <p className="mt-1 text-slate-300">{meeting.meetingProjectName}</p>
                 {channelGroupName(meeting, channel) && (
                   <p className="mt-1 text-sm font-semibold text-emerald-200">
-                    {channel === "internal" ? "สำหรับผู้ปฏิบัติงาน" : "สำหรับผู้ร่วมประชุม"} ({channelGroupName(meeting, channel)})
+                    {channel === "internal" ? "สำหรับบริษัทฯ" : "สำหรับผู้ร่วมประชุม"} ({channelGroupName(meeting, channel)})
                   </p>
                 )}
                 <p className="mt-2 text-sm text-slate-300">

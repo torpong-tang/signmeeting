@@ -182,7 +182,7 @@ export async function GET(_request: Request, { params }: Params) {
         rows: meeting.attendances.filter((row) => row.channel === "EXTERNAL"),
       },
       {
-        title: groupNameLabel("สำหรับผู้ปฏิบัติงาน", meeting.internalMeetingName),
+        title: groupNameLabel("สำหรับบริษัทฯ", meeting.internalMeetingName),
         rows: meeting.attendances.filter((row) => row.channel === "INTERNAL"),
       },
     ].filter((group) => group.rows.length > 0);
