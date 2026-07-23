@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
 import { deleteMeetingPhotoFile, readMeetingPhotoFile, saveMeetingPhotoFile } from "@/lib/photo-storage";
 
 type Params = { params: Promise<{ meetingId: string; channel: string }> };
@@ -77,8 +77,8 @@ export async function GET(_request: Request, { params }: Params) {
 }
 
 export async function POST(request: Request, { params }: Params) {
-  const denied = await requireAuth();
-  if (denied) return denied;
+  const session = await getSession();
+  if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const { meetingId, channel: rawChannel } = await params;
   const channel = normalizeChannel(rawChannel);
   if (!channel) {
@@ -103,26 +103,49 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const { storagePath: oldStoragePath } = imageMeta(meeting, channel);
-  await deleteMeetingPhotoFile(oldStoragePath);
+  const oldFilename = channel === "internal" ? meeting.internalGroupImageFilename : meeting.externalGroupImageFilename;
   const storagePath = await saveMeetingPhotoFile(meetingId, file);
-  const updated = await prisma.meeting.update({
-    where: { meetingId },
-    data: imageUpdateData(channel, file, storagePath),
-    include: {
-      attendances: { orderBy: { personNo: "asc" } },
-      photos: {
-        orderBy: { createdAt: "desc" },
-        select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
-      },
-    },
-  });
+  let updated;
+  try {
+    [updated] = await prisma.$transaction([
+      prisma.meeting.update({
+        where: { meetingId },
+        data: imageUpdateData(channel, file, storagePath),
+        include: {
+          attendances: { orderBy: { personNo: "asc" } },
+          photos: {
+            orderBy: { createdAt: "desc" },
+            select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
+          },
+        },
+      }),
+      prisma.meetingChangeLog.create({
+        data: {
+          meetingId,
+          changedBy: session.u,
+          changesJson: JSON.stringify([
+            {
+              field: channel === "internal" ? "internalGroupImage" : "externalGroupImage",
+              label: channel === "internal" ? "รูปกลุ่มผู้ปฏิบัติงาน" : "รูปกลุ่มผู้ร่วมประชุม",
+              before: oldFilename || "-",
+              after: file.name,
+            },
+          ]),
+        },
+      }),
+    ]);
+  } catch (error) {
+    await deleteMeetingPhotoFile(storagePath);
+    throw error;
+  }
+  await deleteMeetingPhotoFile(oldStoragePath);
 
   return NextResponse.json(updated);
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const denied = await requireAuth();
-  if (denied) return denied;
+  const session = await getSession();
+  if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const { meetingId, channel: rawChannel } = await params;
   const channel = normalizeChannel(rawChannel);
   if (!channel) {
@@ -135,18 +158,36 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
 
   const { storagePath } = imageMeta(meeting, channel);
-  await deleteMeetingPhotoFile(storagePath);
-  const updated = await prisma.meeting.update({
-    where: { meetingId },
-    data: imageClearData(channel),
-    include: {
-      attendances: { orderBy: { personNo: "asc" } },
-      photos: {
-        orderBy: { createdAt: "desc" },
-        select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
+  const oldFilename = channel === "internal" ? meeting.internalGroupImageFilename : meeting.externalGroupImageFilename;
+  if (!storagePath && !oldFilename) return NextResponse.json(meeting);
+  const [updated] = await prisma.$transaction([
+    prisma.meeting.update({
+      where: { meetingId },
+      data: imageClearData(channel),
+      include: {
+        attendances: { orderBy: { personNo: "asc" } },
+        photos: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
+        },
       },
-    },
-  });
+    }),
+    prisma.meetingChangeLog.create({
+      data: {
+        meetingId,
+        changedBy: session.u,
+        changesJson: JSON.stringify([
+          {
+            field: channel === "internal" ? "internalGroupImage" : "externalGroupImage",
+            label: channel === "internal" ? "รูปกลุ่มผู้ปฏิบัติงาน" : "รูปกลุ่มผู้ร่วมประชุม",
+            before: oldFilename || "-",
+            after: "-",
+          },
+        ]),
+      },
+    }),
+  ]);
+  await deleteMeetingPhotoFile(storagePath);
 
   return NextResponse.json(updated);
 }

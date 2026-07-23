@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { appOriginPath } from "@/lib/paths";
 import { randomBytes } from "crypto";
+import { deleteMeetingPhotoFile, saveAttendanceSignatureFile } from "@/lib/photo-storage";
 
 export async function nextMeetingId() {
   const year = new Date().getFullYear();
@@ -50,6 +51,9 @@ type AttendanceInput = {
   lname: string;
   department: string;
   position: string;
+  email?: string | null;
+  phone?: string | null;
+  signatureData: string;
 };
 
 function normalize(value: string) {
@@ -83,6 +87,8 @@ export async function createAttendance(input: AttendanceInput) {
     throw new DuplicateAttendanceError();
   }
 
+  const signaturePath = await saveAttendanceSignatureFile(input.meetingId, input.signatureData);
+
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const personNo = await nextPersonNo(input.meetingId);
@@ -97,6 +103,9 @@ export async function createAttendance(input: AttendanceInput) {
           lname: input.lname,
           department: input.department,
           position: input.position,
+          email: input.email?.trim() || null,
+          phone: input.phone?.trim() || null,
+          signaturePath,
           dedupeKey,
         },
       });
@@ -105,15 +114,18 @@ export async function createAttendance(input: AttendanceInput) {
         // A concurrent insert won the race. Tell the two conflicts apart by
         // which unique index tripped.
         if (JSON.stringify(error.meta?.target ?? "").includes("dedupeKey")) {
+          await deleteMeetingPhotoFile(signaturePath);
           throw new DuplicateAttendanceError();
         }
         if (attempt < maxAttempts) {
           continue; // personNo collision — recompute and retry
         }
       }
+      await deleteMeetingPhotoFile(signaturePath);
       throw error;
     }
   }
+  await deleteMeetingPhotoFile(signaturePath);
   throw new Error("Unable to assign a unique attendance number");
 }
 

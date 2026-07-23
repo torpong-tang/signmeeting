@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   CheckCircle2,
   ClipboardCheck,
+  Eraser,
   Loader2,
+  PenLine,
   Save,
   Search,
   Users,
@@ -144,7 +146,7 @@ function PersonCombobox({
                     {person.fname} {person.lname}
                   </span>
                   <span className="text-xs font-normal text-slate-400">
-                    {person.department} • {person.position}
+                    {person.position}
                   </span>
                 </button>
               </li>
@@ -156,17 +158,122 @@ function PersonCombobox({
   );
 }
 
+function SignaturePad({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawingRef = useRef(false);
+  const hasStrokeRef = useRef(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    function prepareCanvas() {
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      canvas.width = Math.max(1, Math.round(rect.width * ratio));
+      canvas.height = Math.max(1, Math.round(rect.height * ratio));
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, rect.width, rect.height);
+
+      if (value) {
+        const image = new Image();
+        image.onload = () => context.drawImage(image, 0, 0, rect.width, rect.height);
+        image.src = value;
+      }
+    }
+
+    prepareCanvas();
+    window.addEventListener("resize", prepareCanvas);
+    return () => window.removeEventListener("resize", prepareCanvas);
+  }, [value]);
+
+  function point(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function startDrawing(event: ReactPointerEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    const context = event.currentTarget.getContext("2d");
+    if (!context) return;
+    const current = point(event);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    context.beginPath();
+    context.moveTo(current.x, current.y);
+    context.strokeStyle = "#0f172a";
+    context.lineWidth = 2.5;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    drawingRef.current = true;
+    hasStrokeRef.current = false;
+  }
+
+  function draw(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current) return;
+    event.preventDefault();
+    const context = event.currentTarget.getContext("2d");
+    if (!context) return;
+    const current = point(event);
+    context.lineTo(current.x, current.y);
+    context.stroke();
+    hasStrokeRef.current = true;
+  }
+
+  function finishDrawing(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current) return;
+    drawingRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (hasStrokeRef.current) onChange(event.currentTarget.toDataURL("image/png"));
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 font-semibold text-slate-200">
+          <PenLine className="h-5 w-5 text-emerald-300" /> ลายมือชื่อ <span className="text-rose-300">*</span>
+        </span>
+        <button
+          className={`${buttonBase} min-h-10 bg-slate-700 px-3 text-white hover:bg-slate-600`}
+          onClick={() => onChange("")}
+          type="button"
+        >
+          <Eraser className="h-4 w-4" /> ล้างลายมือชื่อ
+        </button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        aria-label="ช่องลงลายมือชื่อ"
+        className="h-40 w-full touch-none rounded-xl border-2 border-dashed border-emerald-400/50 bg-white shadow-inner"
+        onPointerCancel={finishDrawing}
+        onPointerDown={startDrawing}
+        onPointerMove={draw}
+        onPointerUp={finishDrawing}
+      />
+      <p className="text-sm text-slate-400">เขียนลายมือชื่อด้วยเมาส์ ปากกา หรือปลายนิ้วภายในกรอบ</p>
+    </div>
+  );
+}
+
 export function RegisterPage({ meetingId, channel }: { meetingId: string; channel: Channel }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [registeredIntPids, setRegisteredIntPids] = useState<number[]>([]);
   const [selectedPerson, setSelectedPerson] = useState("");
   const [comboboxKey, setComboboxKey] = useState(0);
+  const [signatureData, setSignatureData] = useState("");
   const [form, setForm] = useState({
     fname: "",
     lname: "",
     department: "",
     position: "",
+    email: "",
+    phone: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -208,7 +315,7 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
     setSelectedPerson(value);
     const person = people.find((item) => String(item.intPid) === value);
     if (!person) {
-      setForm({ fname: "", lname: "", department: "", position: "" });
+      setForm({ fname: "", lname: "", department: "", position: "", email: "", phone: "" });
       return;
     }
     setForm({
@@ -216,12 +323,32 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
       lname: person.lname,
       department: person.department,
       position: person.position,
+      email: "",
+      phone: "",
     });
   }
 
   async function submit(mode: "close" | "continue") {
-    if (!form.fname || !form.lname || !form.department || !form.position) {
+    const hasExternalGroupName = Boolean(meeting?.externalMeetingName?.trim());
+    if (
+      !form.fname ||
+      !form.lname ||
+      !form.position ||
+      (channel === "external" && !hasExternalGroupName && !form.department)
+    ) {
       setError("กรุณากรอกข้อมูลให้ครบถ้วน");
+      return;
+    }
+    if (channel === "external" && (!form.email || !form.phone)) {
+      setError("กรุณากรอก E-mail และโทรศัพท์");
+      return;
+    }
+    if (channel === "external" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError("กรุณากรอก E-mail ให้ถูกต้อง");
+      return;
+    }
+    if (!signatureData) {
+      setError("กรุณาลงลายมือชื่อก่อนบันทึก");
       return;
     }
     if (!meeting) return;
@@ -236,6 +363,7 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
           ...form,
           channel: channel === "internal" ? "INTERNAL" : "EXTERNAL",
           intPid: channel === "internal" ? Number(selectedPerson) || null : null,
+          signatureData,
         }),
       });
       if (!response.ok) {
@@ -251,8 +379,9 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
         }
       }
       if (mode === "continue") {
-        setForm({ fname: "", lname: "", department: "", position: "" });
+        setForm({ fname: "", lname: "", department: "", position: "", email: "", phone: "" });
         setSelectedPerson("");
+        setSignatureData("");
         setComboboxKey((key) => key + 1); // clear the combobox input for the next person
       }
     } catch (submitError) {
@@ -394,12 +523,39 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
                     <input className={inputBase} disabled={channel === "internal"} required value={form.lname} onChange={(event) => setForm({ ...form, lname: event.target.value })} />
                   </Field>
                 </div>
-                <Field label="หน่วยงาน/สังกัด">
-                  <input className={inputBase} disabled={channel === "internal"} required value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} />
-                </Field>
-                <Field label="ตำแหน่ง">
-                  <input className={inputBase} disabled={channel === "internal"} required value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
-                </Field>
+                {channel === "external" && (
+                  <>
+                    <Field label="ตำแหน่ง">
+                      <input className={inputBase} required value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
+                    </Field>
+                    {meeting.externalMeetingName?.trim() ? (
+                      <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
+                        <p className="text-sm text-slate-300">หน่วยงาน/สังกัด</p>
+                        <p className="mt-1 font-semibold text-emerald-100">{meeting.externalMeetingName}</p>
+                      </div>
+                    ) : (
+                      <Field label="หน่วยงาน/สังกัด">
+                        <input
+                          className={inputBase}
+                          data-testid="external-department-input"
+                          required
+                          value={form.department}
+                          onChange={(event) => setForm({ ...form, department: event.target.value })}
+                        />
+                      </Field>
+                    )}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="โทรศัพท์">
+                        <input className={inputBase} inputMode="tel" required type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+                      </Field>
+                      <Field label="E-mail">
+                        <input className={inputBase} required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+                      </Field>
+                    </div>
+                  </>
+                )}
+
+                <SignaturePad value={signatureData} onChange={setSignatureData} />
 
                 <div className="grid gap-3 md:grid-cols-3">
                 <button className={`${buttonBase} bg-emerald-500 text-slate-950 hover:bg-emerald-300`} disabled={saving} onClick={() => submit("close")} type="button">

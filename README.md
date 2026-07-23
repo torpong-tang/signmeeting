@@ -12,10 +12,39 @@ SignMeeting is a Next.js app for creating meeting attendance sessions, generatin
   - `สำหรับผู้ร่วมประชุม` for external participants.
 - Internal personnel master data for dropdown registration.
 - Meeting attendance table with live search, pagination, sorting, and export.
+- Attendance PDF export supports both landscape detail format and a compact portrait format with combined organization/contact fields.
 - QR Code new-tab view with meeting details and copy-as-image support.
 - Meeting photos, capped at 20 MB total per meeting.
 - Group thumbnail images for internal/external QR cards, capped at 2 MB per group image.
+- External registration can use a fixed group name as the attendee department, or require each attendee to enter their own department.
+- Server-enforced meeting edit policy locks Meeting Type, protects schedule/group fields after Attendance exists, and rejects stale concurrent edits.
+- Meeting metadata changes are recorded with administrator, timestamp, and before/after values in `MeetingChangeLog`.
 - Prompt font and footer: `© 2026 TPT Team • Version 1.0`.
+
+## Source Structure
+
+The admin console is split by responsibility so feature work does not accumulate in one component:
+
+| Path | Responsibility |
+| --- | --- |
+| `src/components/SignMeetingApp.tsx` | Admin orchestration, data loading, actions, QR preview, and page composition. |
+| `src/components/RegisterPage.tsx` | Public internal/external registration flow and signature capture. |
+| `src/components/signmeeting/MeetingFormFields.tsx` | Create/edit meeting form, group options, images, and meeting photos. |
+| `src/components/signmeeting/AttendanceTable.tsx` | Attendance search, sorting, pagination, and delete action. |
+| `src/components/signmeeting/ui.tsx` | Shared UI styles, date formatting, sorting, highlighting, and pagination controls. |
+| `src/components/signmeeting/types.ts` | Shared Meeting, Attendance, form, and image types. |
+| `src/lib/meeting-input.ts` | Shared server-side normalization and validation for meeting create/update APIs. |
+
+Keep database validation in API/service modules and keep display-only behavior inside components. New large views or modals should be added as focused files under `src/components/signmeeting/`.
+
+## Meeting Edit Policy
+
+- `Meeting ID`, `Meeting Type`, and QR tokens are immutable after creation.
+- Date and time can be changed only while the meeting has no Attendance records, and cannot be changed to the past.
+- Internal/external group names are locked independently after the corresponding channel has Attendance records.
+- Project name, meeting name, location, late-registration setting, and images remain editable by an authenticated administrator.
+- Existing Attendance keeps its stored department snapshot; later meeting metadata edits do not rewrite historical exports.
+- Updates require the latest `updatedAt` value to prevent one administrator from silently overwriting another administrator's changes.
 
 ## Local Development
 
@@ -112,6 +141,8 @@ ssh -A root@72.62.247.131
 cd /var/www/apps/signmeeting
 git pull --ff-only origin main
 npm ci
+mkdir -p /var/lib/2startup/signmeeting/backups
+cp -p /var/lib/2startup/signmeeting/signmeeting.db "/var/lib/2startup/signmeeting/backups/signmeeting-pre-schema-$(date +%Y%m%d-%H%M%S).db"
 DATABASE_URL="file:/var/lib/2startup/signmeeting/signmeeting.db" SIGNMEETING_UPLOAD_DIR="/var/lib/2startup/signmeeting/uploads" npx prisma generate
 DATABASE_URL="file:/var/lib/2startup/signmeeting/signmeeting.db" SIGNMEETING_UPLOAD_DIR="/var/lib/2startup/signmeeting/uploads" npx prisma db push
 NEXT_PUBLIC_BASE_PATH=/signmeeting DATABASE_URL="file:/var/lib/2startup/signmeeting/signmeeting.db" SIGNMEETING_UPLOAD_DIR="/var/lib/2startup/signmeeting/uploads" npm run build

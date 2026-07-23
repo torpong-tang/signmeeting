@@ -1,23 +1,17 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
   CheckCircle2,
   ClipboardList,
-  CalendarDays,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Download,
   Edit3,
   Eye,
   EyeOff,
+  FileDown,
   FileSpreadsheet,
-  FileText,
-  ImagePlus,
   Loader2,
   MapPin,
   ExternalLink,
@@ -29,111 +23,41 @@ import {
   Settings,
   Save,
   ShieldCheck,
-  ArrowUpDown,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import "driver.js/dist/driver.css";
 import { appOriginPath, appPath } from "@/lib/paths";
+import type {
+  Attendance,
+  ConfigValues,
+  GroupImageChannel,
+  InternalPerson,
+  Meeting,
+  MeetingChangeLog,
+  MeetingForm,
+  MeetingPhoto,
+} from "@/components/signmeeting/types";
+import { AttendanceTable } from "@/components/signmeeting/AttendanceTable";
+import { MeetingFormFields } from "@/components/signmeeting/MeetingFormFields";
+import {
+  buttonTone,
+  compareValues,
+  Field,
+  formatThaiDate,
+  getBangkokDateInput,
+  Highlight,
+  iconButtonTone,
+  includesQuery,
+  inputBase,
+  isPastMeetingTime,
+  PaginationControls,
+  SortableTh,
+  type SortDirection,
+} from "@/components/signmeeting/ui";
 
-type MeetingType = "INTERNAL" | "EXTERNAL";
-type AttendanceType = "INTERNAL" | "EXTERNAL";
-type GroupImageChannel = "internal" | "external";
-
-type Attendance = {
-  id: string;
-  personNo: number;
-  meetingId: string;
-  channel: AttendanceType;
-  fname: string;
-  lname: string;
-  department: string;
-  position: string;
-  timestamp: string;
-};
-
-type InternalPerson = {
-  intPid: number;
-  fname: string;
-  lname: string;
-  department: string;
-  position: string;
-  isActive: boolean;
-};
-
-type Meeting = {
-  id: string;
-  meetingId: string;
-  meetingProjectName: string;
-  meetingName: string;
-  meetingDate: string;
-  startTime: string;
-  endTime: string;
-  meetingLocation: string;
-  meetingType: MeetingType;
-  internalMeetingName: string;
-  externalMeetingName: string | null;
-  internalGroupImageFilename: string | null;
-  internalGroupImageMime: string | null;
-  internalGroupImageSize: number | null;
-  externalGroupImageFilename: string | null;
-  externalGroupImageMime: string | null;
-  externalGroupImageSize: number | null;
-  allowLateRegister: boolean;
-  qrTokenInt: string | null;
-  qrTokenExt: string | null;
-  qrUrlInt: string | null;
-  qrUrlExt: string | null;
-  createdAt: string;
-  attendances: Attendance[];
-  photos: MeetingPhoto[];
-};
-
-type MeetingPhoto = {
-  id: string;
-  meetingId: string;
-  filename: string;
-  mimeType: string;
-  size: number;
-  data?: string;
-  createdAt: string;
-};
-
-type ConfigValues = {
-  meeting_running?: string;
-  close_time?: string;
-};
-
-type MeetingForm = {
-  meetingProjectName: string;
-  meetingName: string;
-  meetingDate: string;
-  startTime: string;
-  endTime: string;
-  meetingLocation: string;
-  meetingType: MeetingType;
-  internalMeetingName: string;
-  externalMeetingName: string;
-  allowLateRegister: boolean;
-};
-
-type SortDirection = "asc" | "desc";
 type MeetingSortKey = "meetingId" | "meetingProjectName" | "meetingName" | "meetingDate" | "meetingType" | "attendances";
-type AttendanceSortKey = "personNo" | "name" | "department" | "position" | "channel" | "timestamp";
-
-function getBangkokDateInput() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Bangkok",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const year = parts.find((part) => part.type === "year")?.value ?? "";
-  const month = parts.find((part) => part.type === "month")?.value ?? "";
-  const day = parts.find((part) => part.type === "day")?.value ?? "";
-  return `${year}-${month}-${day}`;
-}
 
 const emptyForm: MeetingForm = {
   meetingProjectName: "",
@@ -145,66 +69,19 @@ const emptyForm: MeetingForm = {
   meetingType: "EXTERNAL",
   internalMeetingName: "Smarterware",
   externalMeetingName: "",
+  externalGroupMode: "NAMED",
   allowLateRegister: false,
 };
-
-const pageSizeOptions = [10, 30, 50, 100];
-const timeOptions = Array.from({ length: 48 }, (_, index) => {
-  const hour = String(Math.floor(index / 2)).padStart(2, "0");
-  const minute = index % 2 === 0 ? "00" : "30";
-  return `${hour}:${minute}`;
-});
-const endTimeOptions = [...timeOptions, "23:59"];
 
 const emptyPerson = {
   fname: "",
   lname: "",
   department: "",
   position: "",
+  email: "",
+  phone: "",
 };
 
-const buttonBase =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
-const iconButtonBase =
-  "inline-flex h-11 w-11 items-center justify-center rounded-lg text-sm font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
-const iconButtonBaseSm =
-  "inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60";
-const inputBase =
-  "min-h-11 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20";
-
-function buttonTone(tone: "create" | "save" | "edit" | "delete" | "preview" | "excel" | "pdf" | "muted") {
-  const tones = {
-    create: "bg-cyan-500 text-slate-950 hover:bg-cyan-300",
-    save: "bg-emerald-500 text-slate-950 hover:bg-emerald-300",
-    edit: "bg-amber-400 text-slate-950 hover:bg-amber-300",
-    delete: "bg-rose-500 text-white hover:bg-rose-400",
-    preview: "bg-sky-500 text-white hover:bg-sky-400",
-    excel: "bg-lime-500 text-slate-950 hover:bg-lime-300",
-    pdf: "bg-amber-400 text-slate-950 hover:bg-amber-300",
-    muted: "bg-slate-700 text-white hover:bg-slate-600",
-  };
-  return `${buttonBase} ${tones[tone]}`;
-}
-
-function iconButtonTone(tone: "edit" | "delete" | "preview" | "repeat" | "excel" | "pdf" | "muted", size: "md" | "sm" = "md") {
-  const tones = {
-    edit: "bg-amber-400 text-slate-950 hover:bg-amber-300",
-    delete: "bg-rose-500 text-white hover:bg-rose-400",
-    preview: "bg-sky-500 text-white hover:bg-sky-400",
-    repeat: "bg-violet-500 text-white hover:bg-violet-400",
-    excel: "bg-lime-500 text-slate-950 hover:bg-lime-300",
-    pdf: "bg-amber-400 text-slate-950 hover:bg-amber-300",
-    muted: "bg-slate-700 text-white hover:bg-slate-600",
-  };
-  return `${size === "sm" ? iconButtonBaseSm : iconButtonBase} ${tones[tone]}`;
-}
-
-function formatThaiDate(value: string) {
-  if (!value) return "-";
-  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
-  if (!year || !month || !day) return value;
-  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year + 543}`;
-}
 
 const thaiWeekdays = ["วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"];
 const thaiMonths = [
@@ -246,23 +123,8 @@ function groupNameLabel(label: string, name?: string | null) {
   return clean ? `${label} (${clean})` : label;
 }
 
-function formatThaiDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear() + 543;
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${day}/${month}/${year} ${hour}:${minute}`;
-}
-
 function getMeetingStartDate(form: Pick<MeetingForm, "meetingDate" | "startTime">) {
   return new Date(`${form.meetingDate}T${form.startTime || "00:00"}:00+07:00`);
-}
-
-function isPastMeetingTime(form: Pick<MeetingForm, "meetingDate" | "startTime">) {
-  return getMeetingStartDate(form).getTime() < Date.now();
 }
 
 function isEndTimeAfterStart(form: Pick<MeetingForm, "startTime" | "endTime">) {
@@ -273,121 +135,6 @@ function isRegistrationWindowClosed(form: Pick<MeetingForm, "meetingDate" | "sta
   const limit = Number.parseInt(limitMinutes ?? "15", 10) || 15;
   const deadline = new Date(getMeetingStartDate(form).getTime() + limit * 60 * 1000);
   return !form.allowLateRegister && Date.now() > deadline.getTime();
-}
-
-function compareValues(a: unknown, b: unknown, direction: SortDirection) {
-  const modifier = direction === "asc" ? 1 : -1;
-  if (typeof a === "number" && typeof b === "number") return (a - b) * modifier;
-  return String(a ?? "").localeCompare(String(b ?? ""), "th", { numeric: true }) * modifier;
-}
-
-function includesQuery(values: unknown[], query: string) {
-  const keyword = query.trim().toLowerCase();
-  if (!keyword) return true;
-  return values.some((value) => String(value ?? "").toLowerCase().includes(keyword));
-}
-
-function Highlight({ text, query }: { text: React.ReactNode; query: string }) {
-  const raw = String(text ?? "");
-  const keyword = query.trim();
-  if (!keyword) return <>{raw}</>;
-  const index = raw.toLowerCase().indexOf(keyword.toLowerCase());
-  if (index < 0) return <>{raw}</>;
-  return (
-    <>
-      {raw.slice(0, index)}
-      <mark className="rounded bg-amber-300 px-1 text-slate-950">{raw.slice(index, index + keyword.length)}</mark>
-      {raw.slice(index + keyword.length)}
-    </>
-  );
-}
-
-// Builds the page-number list with ellipses, e.g. page 1 of 16 → [1,2,3,4,5,"…",16].
-function getPageList(current: number, total: number): (number | "ellipsis")[] {
-  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
-  if (current <= 4) return [1, 2, 3, 4, 5, "ellipsis", total];
-  if (current >= total - 3) return [1, "ellipsis", total - 4, total - 3, total - 2, total - 1, total];
-  return [1, "ellipsis", current - 1, current, current + 1, "ellipsis", total];
-}
-
-function PaginationControls({
-  page,
-  pageSize,
-  total,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  page: number;
-  pageSize: number;
-  total: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (pageSize: number) => void;
-}) {
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const navBtn = "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
-
-  return (
-    <div className="flex flex-col items-center gap-3 border-t border-slate-700 bg-slate-950/35 px-4 py-3 md:flex-row md:justify-between">
-      <div className="flex items-center gap-2 text-sm text-slate-300">
-        <span>Show</span>
-        <select
-          className="h-9 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-semibold text-white"
-          value={pageSize}
-          onChange={(event) => {
-            onPageSizeChange(Number(event.target.value));
-            onPageChange(1);
-          }}
-        >
-          {pageSizeOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <span>rows</span>
-      </div>
-
-      <div className="text-sm font-semibold text-amber-300 md:flex-1 md:text-center">
-        พบจำนวนรายการทั้งสิ้น {total} รายการ
-      </div>
-
-      <div className="flex items-center gap-1">
-        <button aria-label="หน้าแรก" className={navBtn} disabled={page <= 1} onClick={() => onPageChange(1)} type="button">
-          <ChevronsLeft className="h-5 w-5" />
-        </button>
-        <button aria-label="ก่อนหน้า" className={navBtn} disabled={page <= 1} onClick={() => onPageChange(page - 1)} type="button">
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        {getPageList(page, pages).map((item, index) =>
-          item === "ellipsis" ? (
-            <span key={`ellipsis-${index}`} className="px-1 text-slate-500">
-              …
-            </span>
-          ) : (
-            <button
-              key={item}
-              aria-current={item === page ? "page" : undefined}
-              className={`inline-flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-bold transition ${
-                item === page
-                  ? "bg-amber-400 text-slate-950"
-                  : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-              }`}
-              onClick={() => onPageChange(item)}
-              type="button"
-            >
-              {item}
-            </button>
-          ),
-        )}
-        <button aria-label="ถัดไป" className={navBtn} disabled={page >= pages} onClick={() => onPageChange(page + 1)} type="button">
-          <ChevronRight className="h-5 w-5" />
-        </button>
-        <button aria-label="หน้าสุดท้าย" className={navBtn} disabled={page >= pages} onClick={() => onPageChange(pages)} type="button">
-          <ChevronsRight className="h-5 w-5" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function SpinnerOverlay({ text }: { text: string }) {
@@ -406,15 +153,17 @@ function Modal({
   children,
   onClose,
   zClass = "z-40",
+  widthClass = "max-w-4xl",
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
   zClass?: string;
+  widthClass?: string;
 }) {
   return (
     <div className={`fixed inset-0 ${zClass} flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm`}>
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div className={`max-h-[92vh] w-full ${widthClass} overflow-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl`}>
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-700 bg-slate-900 px-5 py-4">
           <h2 className="text-xl font-bold">{title}</h2>
           <button className={buttonTone("muted")} onClick={onClose} type="button">
@@ -476,7 +225,7 @@ function ConfirmModal({
 }) {
   return (
     <Modal title="ยืนยันการทำรายการ" onClose={onCancel} zClass="z-[60]">
-      <p className="mb-5 text-slate-200">{message}</p>
+      <p className="mb-5 whitespace-pre-line text-slate-200">{message}</p>
       <div className="flex justify-end gap-3">
         <button className={buttonTone("muted")} onClick={onCancel} type="button">
           <X className="h-4 w-4" /> ยกเลิก
@@ -626,8 +375,8 @@ function QrPanel({ items, meeting }: { items: QrItem[]; meeting: Meeting }) {
     .title{font-size:26px;font-weight:700;margin-bottom:22px;color:#e0f2fe;line-height:1.25}
     .title-label{display:block}
     .title-group{display:block;margin-top:8px;font-weight:800;color:#f8fafc}
-    .group-photo{display:grid;width:220px;height:128px;margin:0 auto 18px;place-items:center;overflow:hidden;border-radius:18px;border:1px solid #334155;background:linear-gradient(135deg,#0f172a,#083344);padding:10px}
-    .group-photo img{max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:12px}
+    .group-photo{display:grid;width:180px;height:104px;margin:0 auto 18px;place-items:center;overflow:hidden;border-radius:16px;border:1px solid #334155;background:linear-gradient(135deg,#0f172a,#083344);padding:9px}
+    .group-photo img{width:100%;height:86px;object-fit:contain;display:block;border-radius:12px}
     .group-photo-empty{display:grid;height:100%;place-items:center;color:#bae6fd;font-weight:700}
     .qr-img{width:300px;height:300px;border-radius:20px;background:white;padding:14px}
     .url{display:block;margin-top:20px;color:#67e8f9;font-size:14px;word-break:break-all;line-height:1.45;text-decoration:underline;cursor:pointer}
@@ -776,8 +525,8 @@ function QrPanel({ items, meeting }: { items: QrItem[]; meeting: Meeting }) {
         ctx.fillStyle = "#162235";
         roundRect(ctx, x, 360, cardWidth, cardHeight - 40, 26);
         ctx.fill();
-        const thumbWidth = 230;
-        const thumbHeight = 132;
+        const thumbWidth = 190;
+        const thumbHeight = 108;
         const thumbX = x + (cardWidth - thumbWidth) / 2;
         const thumbY = 392;
         roundRect(ctx, thumbX, thumbY, thumbWidth, thumbHeight, 20);
@@ -805,7 +554,7 @@ function QrPanel({ items, meeting }: { items: QrItem[]; meeting: Meeting }) {
           ctx.fillStyle = "#bae6fd";
           ctx.font = "700 24px Prompt, Arial";
           ctx.textAlign = "center";
-          ctx.fillText(item.label, x + cardWidth / 2, 468);
+          ctx.fillText(item.label, x + cardWidth / 2, thumbY + thumbHeight / 2 + 8);
         }
         ctx.fillStyle = "#e0f2fe";
         ctx.font = "700 29px Prompt, Arial";
@@ -887,10 +636,10 @@ function QrPanel({ items, meeting }: { items: QrItem[]; meeting: Meeting }) {
 function QrCard({ image, item }: { image?: string; item: QrItem }) {
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
-      <div className="mx-auto mb-4 grid h-32 w-full max-w-56 place-items-center overflow-hidden rounded-xl border border-slate-700 bg-gradient-to-br from-cyan-950/80 to-slate-950 p-2">
+      <div className="mx-auto mb-4 grid h-24 w-full max-w-48 place-items-center overflow-hidden rounded-xl border border-slate-700 bg-gradient-to-br from-cyan-950/80 to-slate-950 p-2">
         {item.groupImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img alt={`${item.title} image`} className="max-h-full max-w-full rounded-lg object-contain" src={item.groupImageUrl} />
+          <img alt={`${item.title} image`} className="h-20 w-full rounded-lg object-contain" src={item.groupImageUrl} />
         ) : (
           <div className="grid h-full w-full place-items-center text-center text-sm font-semibold text-cyan-100">
             {item.label}
@@ -996,6 +745,7 @@ export function SignMeetingApp() {
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [adminModal, setAdminModal] = useState<"settings" | "people" | null>(null);
   const [groupImageFiles, setGroupImageFiles] = useState<Partial<Record<GroupImageChannel, File>>>({});
+  const [meetingChangeLogs, setMeetingChangeLogs] = useState<MeetingChangeLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState("");
   const [confirm, setConfirm] = useState<{ message: string; action: () => void } | null>(null);
@@ -1127,7 +877,7 @@ export function SignMeetingApp() {
             description: `
               <p>จัดการทะเบียนรายชื่อผู้ปฏิบัติงานไว้ล่วงหน้า</p>
               <ul class="sm-list">
-                <li>➕ เพิ่ม/แก้ไขชื่อ หน่วยงาน และตำแหน่ง</li>
+                <li>➕ เพิ่ม/แก้ไขชื่อ หน่วยงาน ตำแหน่ง E-mail และโทรศัพท์</li>
                 <li>⚡ ผู้เข้าร่วมเลือกชื่อจาก <b>dropdown</b> ได้เลย ไม่ต้องพิมพ์เอง</li>
               </ul>
               <p class="sm-tip">🎯 จบแล้ว! พร้อมเริ่มสร้างการประชุมแรกของคุณหรือยัง?</p>
@@ -1188,6 +938,7 @@ export function SignMeetingApp() {
     setEditingId(null);
     setForm(emptyForm);
     setGroupImageFiles({});
+    setMeetingChangeLogs([]);
     setMeetingModalOpen(true);
   }
 
@@ -1203,13 +954,15 @@ export function SignMeetingApp() {
       meetingType: meeting.meetingType,
       internalMeetingName: meeting.internalMeetingName || "Smarterware",
       externalMeetingName: meeting.externalMeetingName || "",
+      externalGroupMode: meeting.externalMeetingName?.trim() ? "NAMED" : "OPEN",
       allowLateRegister: false,
     });
     setGroupImageFiles({});
+    setMeetingChangeLogs([]);
     setMeetingModalOpen(true);
   }
 
-  function startEdit(meeting: Meeting) {
+  async function startEdit(meeting: Meeting) {
     setEditingId(meeting.meetingId);
     setForm({
       meetingProjectName: meeting.meetingProjectName,
@@ -1221,10 +974,22 @@ export function SignMeetingApp() {
       meetingType: meeting.meetingType,
       internalMeetingName: meeting.internalMeetingName || "Smarterware",
       externalMeetingName: meeting.externalMeetingName || "",
+      externalGroupMode: meeting.externalMeetingName?.trim() ? "NAMED" : "OPEN",
       allowLateRegister: meeting.allowLateRegister,
     });
     setGroupImageFiles({});
+    setMeetingChangeLogs([]);
     setMeetingModalOpen(true);
+    setLoading(true);
+    try {
+      const response = await fetch(appPath(`/api/meetings/${meeting.meetingId}/changes`));
+      if (!response.ok) throw new Error("โหลดประวัติการแก้ไขไม่สำเร็จ");
+      setMeetingChangeLogs((await response.json()) as MeetingChangeLog[]);
+    } catch (error) {
+      setAlert(error instanceof Error ? error.message : "โหลดประวัติการแก้ไขไม่สำเร็จ");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function closeMeetingModal() {
@@ -1232,6 +997,7 @@ export function SignMeetingApp() {
     setEditingId(null);
     setForm(emptyForm);
     setGroupImageFiles({});
+    setMeetingChangeLogs([]);
   }
 
   function setGroupImageFile(channel: GroupImageChannel, file: File | null) {
@@ -1256,6 +1022,10 @@ export function SignMeetingApp() {
       setAlert("กรุณากรอกข้อมูลการประชุมให้ครบทุก Field");
       return;
     }
+    if (form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED" && !form.externalMeetingName.trim()) {
+      setAlert("กรุณากรอกชื่อกลุ่มผู้ร่วมประชุม หรือเลือกไม่ระบุชื่อกลุ่มผู้ร่วมประชุม");
+      return;
+    }
     if (!isEndTimeAfterStart(form)) {
       setAlert("End Time ต้องมากกว่า Start Time");
       return;
@@ -1265,8 +1035,36 @@ export function SignMeetingApp() {
       return;
     }
 
+    const editingMeeting = editingId ? meetings.find((meeting) => meeting.meetingId === editingId) : undefined;
+    const normalizedExternalName =
+      form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED"
+        ? form.externalMeetingName.trim()
+        : "";
+    const changedLabels = editingMeeting
+      ? [
+          ["Project Name", editingMeeting.meetingProjectName, form.meetingProjectName.trim()],
+          ["Meeting Name", editingMeeting.meetingName, form.meetingName.trim()],
+          ["Meeting Date", editingMeeting.meetingDate, form.meetingDate],
+          ["Start Time", editingMeeting.startTime, form.startTime],
+          ["End Time", editingMeeting.endTime, form.endTime],
+          ["Location", editingMeeting.meetingLocation, form.meetingLocation.trim()],
+          ["ชื่อกลุ่มผู้ปฏิบัติงาน", editingMeeting.internalMeetingName, form.internalMeetingName.trim()],
+          ["ชื่อกลุ่มผู้ร่วมประชุม", editingMeeting.externalMeetingName ?? "", normalizedExternalName],
+          ["Allow late registration", editingMeeting.allowLateRegister, form.allowLateRegister],
+        ].filter(([, before, after]) => String(before) !== String(after)).map(([label]) => String(label))
+      : [];
+    if (groupImageFiles.internal) changedLabels.push("รูปกลุ่มผู้ปฏิบัติงาน");
+    if (groupImageFiles.external) changedLabels.push("รูปกลุ่มผู้ร่วมประชุม");
+    if (editingId && changedLabels.length === 0) {
+      setAlert(`ไม่มีข้อมูลที่เปลี่ยนแปลงใน ${editingId}`);
+      return;
+    }
+    const confirmationMessage = editingId
+      ? `ยืนยันการแก้ไข ${editingId}?\nรายการที่เปลี่ยน: ${changedLabels.join(", ")}\nระบบจะบันทึกผู้แก้ไข วันเวลา และค่าเดิม/ค่าใหม่ใน Change Log`
+      : "ยืนยันการสร้างการประชุมใหม่?";
+
     setConfirm({
-      message: editingId ? `ยืนยันการแก้ไข ${editingId}?` : "ยืนยันการสร้างการประชุมใหม่?",
+      message: confirmationMessage,
       action: async () => {
         setConfirm(null);
         setLoading(true);
@@ -1274,31 +1072,50 @@ export function SignMeetingApp() {
           const response = await fetch(appPath(editingId ? `/api/meetings/${editingId}` : "/api/meetings"), {
             method: editingId ? "PUT" : "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form),
+            body: JSON.stringify({
+              ...form,
+              externalMeetingName: normalizedExternalName,
+              expectedUpdatedAt: editingMeeting?.updatedAt,
+            }),
           });
           if (!response.ok) {
             const result = (await response.json().catch(() => ({}))) as { message?: string };
             throw new Error(result.message ?? "บันทึกการประชุมไม่สำเร็จ");
           }
           const saved = (await response.json()) as Meeting;
-          const uploadTasks: Promise<void>[] = [];
+          const uploadTasks: Array<{ label: string; channel: "internal" | "external"; file: File }> = [];
           if (groupImageFiles.internal) {
-            uploadTasks.push(uploadMeetingGroupImage(saved.meetingId, "internal", groupImageFiles.internal));
+            uploadTasks.push({
+              label: "รูปกลุ่มผู้ปฏิบัติงาน",
+              channel: "internal",
+              file: groupImageFiles.internal,
+            });
           }
           if (saved.meetingType === "EXTERNAL" && groupImageFiles.external) {
-            uploadTasks.push(uploadMeetingGroupImage(saved.meetingId, "external", groupImageFiles.external));
+            uploadTasks.push({
+              label: "รูปกลุ่มผู้ร่วมประชุม",
+              channel: "external",
+              file: groupImageFiles.external,
+            });
           }
-          if (uploadTasks.length) {
-            await Promise.all(uploadTasks);
+          const failedUploads: string[] = [];
+          for (const upload of uploadTasks) {
+            try {
+              await uploadMeetingGroupImage(saved.meetingId, upload.channel, upload.file);
+            } catch {
+              failedUploads.push(upload.label);
+            }
           }
-          setAlert(
-            editingId
-              ? `บันทึกการแก้ไข ${saved.meetingId} แล้ว${uploadTasks.length ? " พร้อมรูปประจำกลุ่ม" : ""}`
-              : `สร้าง ${saved.meetingId} สำเร็จ${uploadTasks.length ? " พร้อมรูปประจำกลุ่ม" : ""}`,
-          );
           closeMeetingModal();
           await loadMeetings();
           setSelectedId(saved.meetingId);
+          setAlert(
+            failedUploads.length > 0
+              ? `บันทึกข้อมูล ${saved.meetingId} สำเร็จ แต่ Upload ${failedUploads.join(", ")} ไม่สำเร็จ กรุณาเปิดแก้ไขแล้วลองใหม่`
+              : editingId
+                ? `บันทึกการแก้ไข ${saved.meetingId} แล้ว${uploadTasks.length ? " พร้อมรูปประจำกลุ่ม" : ""}`
+                : `สร้าง ${saved.meetingId} สำเร็จ${uploadTasks.length ? " พร้อมรูปประจำกลุ่ม" : ""}`,
+          );
         } catch (error) {
           setAlert(error instanceof Error ? error.message : "บันทึกการประชุมไม่สำเร็จ");
         } finally {
@@ -1414,12 +1231,18 @@ export function SignMeetingApp() {
       lname: person.lname,
       department: person.department,
       position: person.position,
+      email: person.email ?? "",
+      phone: person.phone ?? "",
     });
   }
 
   async function savePerson() {
-    if (!personForm.fname || !personForm.lname || !personForm.department || !personForm.position) {
+    if (!personForm.fname || !personForm.lname || !personForm.position) {
       setAlert("กรุณากรอกข้อมูลผู้ปฏิบัติงานให้ครบถ้วน");
+      return;
+    }
+    if (personForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personForm.email.trim())) {
+      setAlert("กรุณากรอก E-mail ให้ถูกต้อง");
       return;
     }
 
@@ -1466,6 +1289,32 @@ export function SignMeetingApp() {
     });
   }
 
+  function deleteAttendance(attendance: Attendance) {
+    setConfirm({
+      message: `ยืนยันการลบ Attendance ลำดับ ${attendance.personNo} - ${attendance.fname} ${attendance.lname}?`,
+      action: async () => {
+        setConfirm(null);
+        setLoading(true);
+        try {
+          const response = await fetch(
+            appPath(`/api/meetings/${attendance.meetingId}/attendance/${attendance.id}`),
+            { method: "DELETE" },
+          );
+          if (!response.ok) {
+            const result = (await response.json().catch(() => ({}))) as { message?: string };
+            throw new Error(result.message ?? "ไม่สามารถลบ Attendance ได้");
+          }
+          await loadMeetings();
+          setAlert(`ลบ Attendance ลำดับ ${attendance.personNo} เรียบร้อยแล้ว`);
+        } catch (error) {
+          setAlert(error instanceof Error ? error.message : "ไม่สามารถลบ Attendance ได้");
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  }
+
   function deleteMeeting(meeting: Meeting) {
     setConfirm({
       message: `ต้องการลบ ${meeting.meetingId} - ${meeting.meetingName} และรายชื่อผู้เข้าร่วมทั้งหมดใช่ไหม?`,
@@ -1484,18 +1333,20 @@ export function SignMeetingApp() {
     });
   }
 
-  function downloadExport(meeting: Meeting, kind: "excel" | "pdf") {
+  function downloadExport(meeting: Meeting, kind: "excel" | "pdf" | "pdfPortrait") {
     // Both the styled A4 workbook and the A4 PDF are generated server-side and
     // streamed back as a direct download.
     const extension = kind === "excel" ? "xlsx" : "pdf";
-    const endpoint = kind === "excel" ? "export" : "export-pdf";
+    const endpoint = kind === "excel" ? "export" : `export-pdf${kind === "pdfPortrait" ? "?layout=portrait" : ""}`;
+    const filenameSuffix = kind === "pdfPortrait" ? "-portrait" : "";
     const link = document.createElement("a");
     link.href = appPath(`/api/meetings/${meeting.meetingId}/${endpoint}`);
-    link.download = `${meeting.meetingId}-attendance.${extension}`;
+    link.download = `${meeting.meetingId}-attendance${filenameSuffix}.${extension}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setAlert(`Export ${kind === "excel" ? "Excel" : "PDF"} ของ ${meeting.meetingId} แล้ว`);
+    const exportLabel = kind === "excel" ? "Excel" : kind === "pdfPortrait" ? "PDF แนวตั้ง" : "PDF แนวนอน";
+    setAlert(`Export ${exportLabel} ของ ${meeting.meetingId} แล้ว`);
   }
 
   const totalAttendance = meetings.reduce((sum, meeting) => sum + meeting.attendances.length, 0);
@@ -1624,6 +1475,7 @@ export function SignMeetingApp() {
           <MeetingFormFields
             editingId={editingId}
             form={form}
+            changeLogs={meetingChangeLogs}
             onCancel={closeMeetingModal}
             onChange={setForm}
             onDeleteGroupImage={(channel) => deleteMeetingGroupImage(meetings.find((meeting) => meeting.meetingId === editingId), channel)}
@@ -1670,7 +1522,7 @@ export function SignMeetingApp() {
         </Modal>
       )}
       {adminModal === "people" && (
-        <Modal title="ผู้ปฏิบัติงาน" onClose={() => setAdminModal(null)}>
+        <Modal title="ผู้ปฏิบัติงาน" widthClass="max-w-7xl" onClose={() => setAdminModal(null)}>
           <div className="grid gap-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <p className="text-sm text-slate-400">ใช้เป็น dropdown สำหรับ QR ผู้ปฏิบัติงาน</p>
@@ -1686,24 +1538,26 @@ export function SignMeetingApp() {
               </button>
             </div>
 
-            <div className="grid gap-3 rounded-xl border border-slate-700 bg-slate-950/40 p-4 md:grid-cols-4">
+            <div className="grid gap-3 rounded-xl border border-slate-700 bg-slate-950/40 p-4 md:grid-cols-2 xl:grid-cols-5">
               <input className={inputBase} placeholder="ชื่อ" value={personForm.fname} onChange={(event) => setPersonForm({ ...personForm, fname: event.target.value })} />
               <input className={inputBase} placeholder="นามสกุล" value={personForm.lname} onChange={(event) => setPersonForm({ ...personForm, lname: event.target.value })} />
-              <input className={inputBase} placeholder="หน่วยงาน/สังกัด" value={personForm.department} onChange={(event) => setPersonForm({ ...personForm, department: event.target.value })} />
               <input className={inputBase} placeholder="ตำแหน่ง" value={personForm.position} onChange={(event) => setPersonForm({ ...personForm, position: event.target.value })} />
-              <button className={`${buttonTone("save")} md:col-span-4`} onClick={savePerson} type="button">
+              <input className={inputBase} placeholder="E-mail" type="email" value={personForm.email} onChange={(event) => setPersonForm({ ...personForm, email: event.target.value })} />
+              <input className={inputBase} inputMode="tel" placeholder="โทรศัพท์" type="tel" value={personForm.phone} onChange={(event) => setPersonForm({ ...personForm, phone: event.target.value })} />
+              <button className={`${buttonTone("save")} md:col-span-2 xl:col-span-5`} onClick={savePerson} type="button">
                 <Save className="h-4 w-4" /> {editingPersonId ? "บันทึกการแก้ไขผู้ปฏิบัติงาน" : "เพิ่มผู้ปฏิบัติงาน"}
               </button>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-700">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[1080px] text-left text-sm">
                 <thead className="bg-slate-950 text-slate-300">
                   <tr>
                     <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Department</th>
                     <th className="px-4 py-3">Position</th>
+                    <th className="px-4 py-3">E-mail</th>
+                    <th className="px-4 py-3">โทรศัพท์</th>
                     <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
@@ -1712,8 +1566,9 @@ export function SignMeetingApp() {
                     <tr key={person.intPid} className="border-t border-slate-800">
                       <td className="px-4 py-3 font-semibold text-amber-300">{person.intPid}</td>
                       <td className="px-4 py-3">{person.fname} {person.lname}</td>
-                      <td className="px-4 py-3">{person.department}</td>
                       <td className="px-4 py-3">{person.position}</td>
+                      <td className="px-4 py-3">{person.email || "-"}</td>
+                      <td className="px-4 py-3">{person.phone || "-"}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <button aria-label={`แก้ไข ${person.fname}`} className={iconButtonTone("edit")} onClick={() => startEditPerson(person)} title="แก้ไข" type="button">
@@ -1728,7 +1583,7 @@ export function SignMeetingApp() {
                   ))}
                   {people.length === 0 && (
                     <tr>
-                      <td className="px-4 py-8 text-center text-slate-400" colSpan={5}>
+                      <td className="px-4 py-8 text-center text-slate-400" colSpan={6}>
                         ยังไม่มีข้อมูลผู้ปฏิบัติงาน
                       </td>
                     </tr>
@@ -1962,14 +1817,22 @@ export function SignMeetingApp() {
                       <button aria-label="Export Excel" className={iconButtonTone("excel")} onClick={() => downloadExport(selected, "excel")} title="Export Excel" type="button">
                         <FileSpreadsheet className="h-5 w-5" />
                       </button>
-                      <button aria-label="Export PDF" className={iconButtonTone("pdf")} onClick={() => downloadExport(selected, "pdf")} title="Export PDF" type="button">
+                      <button aria-label="Export PDF แนวนอน" className={iconButtonTone("pdf")} onClick={() => downloadExport(selected, "pdf")} title="Export PDF แนวนอน" type="button">
                         <Download className="h-5 w-5" />
+                      </button>
+                      <button aria-label="Export PDF แนวตั้ง" className={iconButtonTone("pdf")} onClick={() => downloadExport(selected, "pdfPortrait")} title="Export PDF แนวตั้ง" type="button">
+                        <FileDown className="h-5 w-5" />
                       </button>
                     </>
                   )}
                 </div>
               </div>
-              <AttendanceTable rows={selected.attendances} />
+              <AttendanceTable
+                externalGroupName={selected.externalMeetingName || ""}
+                internalGroupName={selected.internalMeetingName}
+                onDelete={deleteAttendance}
+                rows={selected.attendances}
+              />
             </div>
           </AccordionSection>
         )}
@@ -1977,15 +1840,6 @@ export function SignMeetingApp() {
         <footer className="py-4 text-center text-sm text-slate-400">© 2026 TPT Team • Version 1.0</footer>
       </section>
     </main>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-2 text-sm font-semibold text-slate-200">
-      {label}
-      {children}
-    </label>
   );
 }
 
@@ -2027,391 +1881,6 @@ function AccordionSection({
   );
 }
 
-function SortableTh({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <th className="px-4 py-3">
-      <button className="inline-flex items-center gap-2 text-left font-semibold text-slate-300 hover:text-white" onClick={onClick} type="button">
-        {label}
-        <ArrowUpDown className="h-4 w-4 text-amber-300" />
-      </button>
-    </th>
-  );
-}
-
-function MeetingFormFields({
-  editingId,
-  form,
-  groupImageFiles,
-  meeting,
-  onCancel,
-  onChange,
-  onDeleteGroupImage,
-  onDeletePhoto,
-  onGroupImageFileChange,
-  onSave,
-  onUploadPhotos,
-  photos,
-  registrationClosed,
-}: {
-  editingId: string | null;
-  form: MeetingForm;
-  groupImageFiles: Partial<Record<GroupImageChannel, File>>;
-  meeting?: Meeting;
-  onCancel: () => void;
-  onChange: (form: MeetingForm) => void;
-  onDeleteGroupImage: (channel: GroupImageChannel) => void;
-  onDeletePhoto: (meetingId: string, photo: MeetingPhoto) => void;
-  onGroupImageFileChange: (channel: GroupImageChannel, file: File | null) => void;
-  onSave: () => void;
-  onUploadPhotos: (meetingId: string, files: FileList | null) => void;
-  photos: MeetingPhoto[];
-  registrationClosed: boolean;
-}) {
-  const photoTotal = photos.reduce((sum, photo) => sum + photo.size, 0);
-
-  return (
-    <div className="grid gap-4">
-      <Field label="Project Name">
-        <input
-          className={inputBase}
-          required
-          value={form.meetingProjectName}
-          onChange={(event) => onChange({ ...form, meetingProjectName: event.target.value })}
-        />
-      </Field>
-      <Field label="Meeting Name">
-        <input
-          className={inputBase}
-          required
-          value={form.meetingName}
-          onChange={(event) => onChange({ ...form, meetingName: event.target.value })}
-        />
-      </Field>
-      <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Meeting Date">
-          <DatePickerInput value={form.meetingDate} onChange={(meetingDate) => onChange({ ...form, meetingDate })} />
-        </Field>
-        <Field label="Start Time">
-          <select
-            className={inputBase}
-            required
-            value={form.startTime}
-            onChange={(event) => {
-              const startTime = event.target.value;
-              const nextEndTime = form.endTime > startTime ? form.endTime : (endTimeOptions.find((time) => time > startTime) ?? "23:59");
-              onChange({ ...form, startTime, endTime: nextEndTime });
-            }}
-          >
-            {timeOptions.map((time) => {
-              const disabled = form.meetingDate === getBangkokDateInput() && isPastMeetingTime({ meetingDate: form.meetingDate, startTime: time });
-              return (
-                <option disabled={disabled} key={time} value={time}>
-                  {time}
-                </option>
-              );
-            })}
-          </select>
-        </Field>
-        <Field label="End Time">
-          <select
-            className={inputBase}
-            required
-            value={form.endTime}
-            onChange={(event) => onChange({ ...form, endTime: event.target.value })}
-          >
-            {endTimeOptions.map((time) => (
-              <option disabled={time <= form.startTime} key={time} value={time}>
-                {time}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-      <Field label="Location">
-        <input
-          className={inputBase}
-          required
-          value={form.meetingLocation}
-          onChange={(event) => onChange({ ...form, meetingLocation: event.target.value })}
-        />
-      </Field>
-      <Field label="Meeting Type">
-        <div className="grid gap-2 md:grid-cols-2">
-          {(["INTERNAL", "EXTERNAL"] as MeetingType[]).map((type) => (
-            <label
-              key={type}
-              className={`flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-sm ${
-                editingId ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-              }`}
-            >
-              <input
-                checked={form.meetingType === type}
-                disabled={Boolean(editingId)}
-                name="meetingTypeModal"
-                onChange={() => onChange({ ...form, meetingType: type })}
-                type="radio"
-              />
-              {type === "INTERNAL" ? "สำหรับบริษัทฯ" : "สำหรับผู้ร่วมประชุม"}
-            </label>
-          ))}
-        </div>
-        {editingId && (
-          <p className="mt-2 text-xs text-slate-400">
-            ไม่สามารถเปลี่ยนประเภทการประชุมหลังสร้างแล้ว เพราะ QR และรายชื่อผู้ลงทะเบียนผูกกับประเภทนี้
-          </p>
-        )}
-      </Field>
-      <div className="grid gap-3 md:grid-cols-2">
-        <Field label="ชื่อกลุ่มผู้ปฏิบัติงาน">
-          <input
-            className={inputBase}
-            required
-            value={form.internalMeetingName}
-            onChange={(event) => onChange({ ...form, internalMeetingName: event.target.value })}
-          />
-        </Field>
-        {form.meetingType === "EXTERNAL" && (
-          <Field label="ชื่อกลุ่มผู้ร่วมประชุม">
-            <input
-              className={inputBase}
-              placeholder="ชื่อกลุ่มผู้ร่วมประชุม"
-              value={form.externalMeetingName}
-              onChange={(event) => onChange({ ...form, externalMeetingName: event.target.value })}
-            />
-          </Field>
-        )}
-      </div>
-      <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-4">
-        <div className="mb-3">
-          <h3 className="font-bold text-cyan-100">รูปประกอบ QR Code ตามกลุ่ม</h3>
-          <p className="text-xs text-slate-400">
-            เลือกรูปภาพไม่เกิน 2 MB ต่อกลุ่ม ระบบจะแสดงในหน้า QR Code และรูปที่ Copy ออกไป
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <GroupImagePicker
-            channel="internal"
-            existingFilename={meeting?.internalGroupImageFilename}
-            existingImageUrl={editingId && meeting?.internalGroupImageFilename ? appPath(`/api/meetings/${editingId}/group-images/internal`) : ""}
-            file={groupImageFiles.internal}
-            label="รูปกลุ่มผู้ปฏิบัติงาน"
-            onDeleteExisting={() => onDeleteGroupImage("internal")}
-            onFileChange={(file) => onGroupImageFileChange("internal", file)}
-          />
-          {form.meetingType === "EXTERNAL" && (
-            <GroupImagePicker
-              channel="external"
-              existingFilename={meeting?.externalGroupImageFilename}
-              existingImageUrl={editingId && meeting?.externalGroupImageFilename ? appPath(`/api/meetings/${editingId}/group-images/external`) : ""}
-              file={groupImageFiles.external}
-              label="รูปกลุ่มผู้ร่วมประชุม"
-              onDeleteExisting={() => onDeleteGroupImage("external")}
-              onFileChange={(file) => onGroupImageFileChange("external", file)}
-            />
-          )}
-        </div>
-      </section>
-      {editingId && (
-        <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-700 bg-slate-950/50 p-4">
-          <div>
-            <div className="text-sm font-semibold text-slate-100">Allow late registration</div>
-            <p className="text-xs text-slate-400">
-              {registrationClosed ? "ขณะนี้เลยเวลาลงทะเบียนแล้ว สามารถเปิด manual ได้หากจำเป็น" : "เปิดไว้เมื่อต้องการให้ลงทะเบียนได้หลังเกิน Register Time Limit"}
-            </p>
-          </div>
-          <button
-            aria-pressed={form.allowLateRegister}
-            className={`relative h-7 w-14 rounded-full transition ${
-              form.allowLateRegister ? "bg-emerald-400" : "bg-slate-600"
-            }`}
-            onClick={() => onChange({ ...form, allowLateRegister: !form.allowLateRegister })}
-            type="button"
-          >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                form.allowLateRegister ? "left-8" : "left-1"
-              }`}
-            />
-          </button>
-        </label>
-      )}
-      {editingId && (
-        <section className="rounded-xl border border-slate-700 bg-slate-950/40 p-4">
-          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="font-bold text-amber-200">รูปผู้เข้าร่วมประชุม</h3>
-              <p className="text-xs text-slate-400">รวมได้ไม่เกิน 20 MB ต่อการประชุม • ใช้รูปภาพเท่านั้น</p>
-            </div>
-            <label className={`${buttonTone("create")} cursor-pointer`}>
-              <Plus className="h-4 w-4" /> แนบรูป
-              <input
-                accept="image/*"
-                className="hidden"
-                multiple
-                type="file"
-                onChange={(event) => {
-                  onUploadPhotos(editingId, event.target.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
-          </div>
-          <p className="mb-3 text-sm text-slate-300">ใช้ไป {(photoTotal / 1024 / 1024).toFixed(2)} MB / 20 MB</p>
-          <div className="grid gap-3">
-            {photos.map((photo) => (
-              <div key={photo.id} className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-900 p-3">
-                {editingId ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    alt={photo.filename}
-                    className="h-16 w-16 rounded-lg object-cover"
-                    src={appPath(`/api/meetings/${editingId}/photos/${photo.id}`)}
-                  />
-                ) : (
-                  <div className="grid h-16 w-16 place-items-center rounded-lg bg-slate-800 text-amber-300">
-                    <FileText className="h-7 w-7" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{photo.filename}</div>
-                  <div className="text-xs text-slate-400">{photo.mimeType} • {(photo.size / 1024 / 1024).toFixed(2)} MB</div>
-                </div>
-                <button className={iconButtonTone("delete")} onClick={() => onDeletePhoto(editingId, photo)} title="ลบรูป" type="button">
-                  <Trash2 className="h-5 w-5" />
-                </button>
-              </div>
-            ))}
-            {photos.length === 0 && <div className="rounded-lg border border-dashed border-slate-700 p-4 text-center text-slate-400">ยังไม่มีรูปแนบ</div>}
-          </div>
-        </section>
-      )}
-      <div className="flex flex-wrap justify-end gap-3 border-t border-slate-700 pt-4">
-        <button className={buttonTone("muted")} onClick={onCancel} type="button">
-          <X className="h-4 w-4" /> ยกเลิก
-        </button>
-        <button className={buttonTone("save")} onClick={onSave} type="button">
-          <Save className="h-4 w-4" /> {editingId ? "บันทึกการแก้ไข" : "บันทึก"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function GroupImagePicker({
-  channel,
-  existingFilename,
-  existingImageUrl,
-  file,
-  label,
-  onDeleteExisting,
-  onFileChange,
-}: {
-  channel: GroupImageChannel;
-  existingFilename?: string | null;
-  existingImageUrl: string;
-  file?: File;
-  label: string;
-  onDeleteExisting: () => void;
-  onFileChange: (file: File | null) => void;
-}) {
-  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  const shownUrl = previewUrl || existingImageUrl;
-  const shownName = file?.name || existingFilename || "";
-
-  return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="font-semibold text-slate-100">{label}</div>
-          <div className="text-xs text-slate-400">รองรับ JPG, PNG, WEBP และไฟล์รูปภาพอื่น ๆ • สูงสุด 2 MB</div>
-        </div>
-        <ImagePlus className="h-5 w-5 shrink-0 text-cyan-300" />
-      </div>
-      <div className="mb-3 overflow-hidden rounded-lg border border-slate-700 bg-slate-950">
-        {shownUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt={label} className="aspect-[16/9] w-full object-cover" src={shownUrl} />
-        ) : (
-          <div className="grid aspect-[16/9] place-items-center bg-gradient-to-br from-slate-800 to-slate-950 text-center text-sm text-slate-400">
-            ยังไม่มีรูปประกอบ
-          </div>
-        )}
-      </div>
-      {shownName && <div className="mb-3 truncate text-xs text-slate-300">{shownName}</div>}
-      <div className="flex flex-wrap gap-2">
-        <label className={`${buttonTone("create")} min-h-10 cursor-pointer px-3 py-2 text-xs`}>
-          <ImagePlus className="h-4 w-4" /> {shownName ? "เปลี่ยนรูป" : "เลือกรูป"}
-          <input
-            accept="image/*"
-            aria-label={`Upload ${channel} group image`}
-            className="hidden"
-            type="file"
-            onChange={(event) => {
-              onFileChange(event.target.files?.[0] ?? null);
-              event.currentTarget.value = "";
-            }}
-          />
-        </label>
-        {file && (
-          <button className={`${buttonTone("muted")} min-h-10 px-3 py-2 text-xs`} onClick={() => onFileChange(null)} type="button">
-            <X className="h-4 w-4" /> ยกเลิกรูปที่เลือก
-          </button>
-        )}
-        {!file && existingFilename && (
-          <button className={`${buttonTone("delete")} min-h-10 px-3 py-2 text-xs`} onClick={onDeleteExisting} type="button">
-            <Trash2 className="h-4 w-4" /> ลบรูปเดิม
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DatePickerInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  function openPicker() {
-    const picker = inputRef.current;
-    if (!picker) return;
-    if (typeof picker.showPicker === "function") {
-      picker.showPicker();
-      return;
-    }
-    picker.click();
-  }
-
-  return (
-    <div className="relative flex gap-2">
-      <div className={`${inputBase} flex items-center`}>{formatThaiDate(value)}</div>
-      <button className={iconButtonTone("preview")} onClick={openPicker} title="เลือกวันที่" type="button">
-        <CalendarDays className="h-5 w-5" />
-      </button>
-      <input
-        ref={inputRef}
-        aria-label="Meeting Date"
-        className="pointer-events-none absolute h-px w-px opacity-0"
-        min={getBangkokDateInput()}
-        type="date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
-  );
-}
-
 function SummaryCard({
   icon,
   label,
@@ -2433,96 +1902,6 @@ function SummaryCard({
       <div className="mb-4 h-9 w-9">{icon}</div>
       <div className="text-3xl font-extrabold">{value}</div>
       <div className="text-sm text-slate-300">{label}</div>
-    </div>
-  );
-}
-
-function AttendanceTable({ rows }: { rows: Attendance[] }) {
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [sort, setSort] = useState<{ key: AttendanceSortKey; direction: SortDirection }>({
-    key: "personNo",
-    direction: "asc",
-  });
-
-  const visibleRows = useMemo(() => {
-    const filtered = rows.filter((row) =>
-      includesQuery([row.personNo, row.fname, row.lname, row.department, row.position, row.channel, row.timestamp], search),
-    );
-    return [...filtered].sort((a, b) => {
-      const value = (row: Attendance) => {
-        if (sort.key === "name") return `${row.fname} ${row.lname}`;
-        return row[sort.key];
-      };
-      return compareValues(value(a), value(b), sort.direction);
-    });
-  }, [rows, search, sort]);
-
-  const pagedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return visibleRows.slice(start, start + pageSize);
-  }, [page, pageSize, visibleRows]);
-
-  function toggleSort(key: AttendanceSortKey) {
-    setSort((current) => ({
-      key,
-      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
-    }));
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-700">
-      {rows.length > 0 && (
-        <div className="border-b border-slate-700 p-4">
-          <label className="relative block max-w-xl">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input
-              className={`${inputBase} pl-10`}
-              placeholder="Live Search..."
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-            />
-          </label>
-        </div>
-      )}
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left text-sm">
-        <thead className="bg-slate-950 text-slate-300">
-          <tr>
-            <SortableTh label="No." onClick={() => toggleSort("personNo")} />
-            <SortableTh label="Name" onClick={() => toggleSort("name")} />
-            <SortableTh label="Department" onClick={() => toggleSort("department")} />
-            <SortableTh label="Position" onClick={() => toggleSort("position")} />
-            <SortableTh label="Channel" onClick={() => toggleSort("channel")} />
-            <SortableTh label="Timestamp" onClick={() => toggleSort("timestamp")} />
-          </tr>
-        </thead>
-        <tbody>
-          {pagedRows.map((row) => (
-            <tr key={row.id} className="border-t border-slate-800">
-              <td className="px-4 py-3 font-semibold text-amber-300"><Highlight query={search} text={row.personNo} /></td>
-              <td className="px-4 py-3"><Highlight query={search} text={`${row.fname} ${row.lname}`} /></td>
-              <td className="px-4 py-3"><Highlight query={search} text={row.department} /></td>
-              <td className="px-4 py-3"><Highlight query={search} text={row.position} /></td>
-              <td className="px-4 py-3"><Highlight query={search} text={row.channel} /></td>
-              <td className="px-4 py-3">{formatThaiDateTime(row.timestamp)}</td>
-            </tr>
-          ))}
-          {visibleRows.length === 0 && (
-            <tr>
-              <td className="px-4 py-8 text-center text-slate-400" colSpan={6}>
-                ยังไม่มีผู้ลงทะเบียน
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      </div>
-      <PaginationControls page={page} pageSize={pageSize} total={visibleRows.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import path from "path";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { readMeetingPhotoFile } from "@/lib/photo-storage";
 
 type Params = { params: Promise<{ meetingId: string }> };
 
@@ -42,7 +43,16 @@ function formatThaiDate(value: string) {
 }
 
 type Column = { label: string; width: number; align: "left" | "center"; value: (row: Row) => string };
-type Row = { displayNo: number; fname: string; lname: string; department: string; position: string };
+type Row = {
+  displayNo: number;
+  fname: string;
+  lname: string;
+  department: string;
+  position: string;
+  email: string | null;
+  phone: string | null;
+  timestamp: Date;
+};
 
 function formatTimeRange(startTime: string, endTime?: string | null) {
   const start = startTime.slice(0, 5);
@@ -50,15 +60,24 @@ function formatTimeRange(startTime: string, endTime?: string | null) {
   return end ? `${start}-${end}` : start;
 }
 
-function groupNameLabel(label: string, name?: string | null) {
-  const clean = String(name ?? "").trim();
-  return clean ? `${label} (${clean})` : label;
+function formatAttendanceDateTime(value: Date) {
+  const formatter = new Intl.DateTimeFormat("th-TH", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  return formatter.format(value).replace(",", "");
 }
 
-export async function GET(_request: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   const denied = await requireAuth();
   if (denied) return denied;
   const { meetingId } = await params;
+  const isPortrait = new URL(request.url).searchParams.get("layout") === "portrait";
 
   const meeting = await prisma.meeting.findUnique({
     where: { meetingId },
@@ -68,7 +87,12 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ message: "Meeting not found" }, { status: 404 });
   }
 
-  const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+  const doc = new PDFDocument({
+    size: "A4",
+    layout: isPortrait ? "portrait" : "landscape",
+    margin: 32,
+    bufferPages: true,
+  });
   doc.registerFont("th", FONT_REGULAR);
   doc.registerFont("th-bold", FONT_BOLD);
 
@@ -96,29 +120,69 @@ export async function GET(_request: Request, { params }: Params) {
       .fontSize(11)
       .text(`${formatThaiDate(m.meetingDate)} เวลา ${formatTimeRange(m.startTime, m.endTime)} น.`, { align: "center" });
     doc.text(`ณ ${m.meetingLocation}`, { align: "center" });
-    doc.moveDown(1);
+    doc
+      .font("th-bold")
+      .fontSize(11)
+      .fillColor("#0e7490")
+      .text(`จำนวนผู้เข้าประชุมทั้งหมด ${m.attendances.length} คน`, { align: "center" });
+    doc.moveDown(0.7);
   }
 
   drawHeader();
 
   // --- Table ---
-  const columns: Column[] = [
-    { label: "ลำดับ", width: 50, align: "center", value: (row) => String(row.displayNo) },
-    { label: "ชื่อ-นามสกุล", width: 175, align: "left", value: (row) => `${row.fname} ${row.lname}` },
-    { label: "หน่วยงาน/สังกัด", width: 160, align: "left", value: (row) => row.department },
-    { label: "ตำแหน่ง", width: contentWidth - 385, align: "left", value: (row) => row.position },
-  ];
-  const padding = 5;
+  const portraitWidths = {
+    no: 34,
+    name: 125,
+    organization: 179,
+    contact: 78,
+  };
+  const columns: Column[] = isPortrait
+    ? [
+        { label: "ลำดับ", width: portraitWidths.no, align: "center", value: (row) => String(row.displayNo) },
+        {
+          label: "ชื่อ-นามสกุล",
+          width: portraitWidths.name,
+          align: "left",
+          value: (row) => `${row.fname} ${row.lname}`,
+        },
+        {
+          label: "ตำแหน่ง หน่วยงาน/สังกัด",
+          width: portraitWidths.organization,
+          align: "left",
+          value: (row) => `${row.position || "-"}\n${row.department || "-"}`,
+        },
+        {
+          label: "โทรศัพท์ (E-mail)",
+          width: portraitWidths.contact,
+          align: "left",
+          value: (row) => `${row.phone || "-"}\n(${row.email || "-"})`,
+        },
+        {
+          label: "ลายเซ็นต์",
+          width: contentWidth - Object.values(portraitWidths).reduce((sum, width) => sum + width, 0),
+          align: "center",
+          value: () => "",
+        },
+      ]
+    : [
+        { label: "ลำดับ", width: 36, align: "center", value: (row) => String(row.displayNo) },
+        { label: "ชื่อ-นามสกุล", width: 120, align: "left", value: (row) => `${row.fname} ${row.lname}` },
+        { label: "ตำแหน่ง", width: 92, align: "left", value: (row) => row.position },
+        { label: "หน่วยงาน/สังกัด", width: 110, align: "left", value: (row) => row.department },
+        { label: "โทรศัพท์", width: 78, align: "left", value: (row) => row.phone || "-" },
+        { label: "E-mail", width: 128, align: "left", value: (row) => row.email || "-" },
+        { label: "วัน เวลา", width: 90, align: "center", value: (row) => formatAttendanceDateTime(row.timestamp) },
+        { label: "ลายเซ็นต์", width: contentWidth - 654, align: "center", value: () => "" },
+      ];
+  const padding = isPortrait ? 3 : 5;
 
-  function drawRow(cells: string[], options: { header?: boolean }) {
+  function drawRow(cells: string[], options: { header?: boolean; signature?: Buffer | null }) {
     const fontName = options.header ? "th-bold" : "th";
-    const fontSize = options.header ? 11 : 10;
+    const fontSize = options.header ? 9 : 8;
     doc.font(fontName).fontSize(fontSize);
 
-    const heights = cells.map((text, index) =>
-      doc.heightOfString(text || " ", { width: columns[index].width - padding * 2 }),
-    );
-    const rowHeight = Math.max(...heights) + padding * 2;
+    const rowHeight = options.header ? (isPortrait ? 26 : 24) : isPortrait ? 30 : 36;
 
     // Page break: start a new page, repeat the meeting header + table header row.
     if (doc.y + rowHeight > bottom) {
@@ -137,34 +201,37 @@ export async function GET(_request: Request, { params }: Params) {
         doc.restore();
       }
       doc.rect(x, y, column.width, rowHeight).strokeColor("#94a3b8").lineWidth(0.5).stroke();
-      doc
-        .font(fontName)
-        .fontSize(fontSize)
-        .fillColor(options.header ? "#ffffff" : "#0f172a")
-        .text(text || "", x + padding, y + padding, { width: column.width - padding * 2, align: column.align });
+      if (!options.header && index === columns.length - 1 && options.signature) {
+        const signaturePaddingX = isPortrait ? 8 : 10;
+        const signaturePaddingY = isPortrait ? 3 : 7;
+        doc.image(options.signature, x + signaturePaddingX, y + signaturePaddingY, {
+          fit: [column.width - signaturePaddingX * 2, rowHeight - signaturePaddingY * 2],
+          align: "center",
+          valign: "center",
+        });
+      } else {
+        const displayText = text || (index === columns.length - 1 && !options.header ? "-" : "");
+        const cellFontSize = isPortrait && !options.header && index === 3 ? 7 : fontSize;
+        doc.font(fontName).fontSize(cellFontSize);
+        const availableHeight = rowHeight - padding * 2;
+        const textHeight = Math.min(
+          doc.heightOfString(displayText || " ", { width: column.width - padding * 2 }),
+          availableHeight,
+        );
+        const textY = y + (rowHeight - textHeight) / 2;
+        doc
+          .font(fontName)
+          .fontSize(cellFontSize)
+          .fillColor(options.header ? "#ffffff" : "#0f172a")
+          .text(displayText, x + padding, textY, {
+            width: column.width - padding * 2,
+            height: availableHeight,
+            align: column.align,
+            ellipsis: true,
+          });
+      }
       x += column.width;
     });
-    doc.y = y + rowHeight;
-    doc.x = left;
-  }
-
-  function drawGroupTitleRow(title: string, count: number) {
-    const rowHeight = 24;
-    if (doc.y + rowHeight > bottom) {
-      doc.addPage();
-      drawHeader();
-      drawRow(columns.map((column) => column.label), { header: true });
-    }
-    const y = doc.y;
-    doc.save();
-    doc.rect(left, y, contentWidth, rowHeight).fill("#e0f2fe");
-    doc.restore();
-    doc.rect(left, y, contentWidth, rowHeight).strokeColor("#94a3b8").lineWidth(0.5).stroke();
-    doc
-      .font("th-bold")
-      .fontSize(12)
-      .fillColor("#0f172a")
-      .text(`${title}  จำนวน ${count} คน`, left + padding, y + 5, { width: contentWidth - padding * 2 });
     doc.y = y + rowHeight;
     doc.x = left;
   }
@@ -176,30 +243,48 @@ export async function GET(_request: Request, { params }: Params) {
       align: "center",
     });
   } else {
-    const groups = [
-      {
-        title: groupNameLabel("สำหรับผู้ร่วมประชุม", meeting.externalMeetingName),
-        rows: meeting.attendances.filter((row) => row.channel === "EXTERNAL"),
-      },
-      {
-        title: groupNameLabel("สำหรับบริษัทฯ", meeting.internalMeetingName),
-        rows: meeting.attendances.filter((row) => row.channel === "INTERNAL"),
-      },
-    ].filter((group) => group.rows.length > 0);
+    const byTimestamp = (a: (typeof meeting.attendances)[number], b: (typeof meeting.attendances)[number]) => {
+      const timeDifference = a.timestamp.getTime() - b.timestamp.getTime();
+      return timeDifference || a.personNo - b.personNo;
+    };
+    const orderedAttendances = [
+      ...meeting.attendances.filter((row) => row.channel === "EXTERNAL").sort(byTimestamp),
+      ...meeting.attendances.filter((row) => row.channel === "INTERNAL").sort(byTimestamp),
+    ];
+    const internalIds = orderedAttendances
+      .map((row) => row.intPid)
+      .filter((intPid): intPid is number => intPid != null);
+    const internalPeople = internalIds.length
+      ? await prisma.internalPerson.findMany({ where: { intPid: { in: internalIds } } })
+      : [];
+    const internalPeopleById = new Map(internalPeople.map((person) => [person.intPid, person]));
+    const signatures = new Map<string, Buffer>();
+    await Promise.all(
+      orderedAttendances.map(async (attendance) => {
+        if (!attendance.signaturePath) return;
+        try {
+          signatures.set(attendance.id, await readMeetingPhotoFile(attendance.signaturePath));
+        } catch {
+          // Keep the report usable when an old signature file is unavailable.
+        }
+      }),
+    );
 
-    groups.forEach((group, groupIndex) => {
-      if (groupIndex === 0) {
-        drawRow(columns.map((column) => column.label), { header: true });
-      } else if (doc.y + 48 > bottom) {
-        doc.addPage();
-        drawHeader();
-        drawRow(columns.map((column) => column.label), { header: true });
-      }
-      drawGroupTitleRow(group.title, group.rows.length);
-      group.rows.forEach((attendance, index) => {
-        const row = { ...attendance, displayNo: index + 1 };
-        drawRow(columns.map((column) => column.value(row)), {});
-      });
+    drawRow(columns.map((column) => column.label), { header: true });
+    orderedAttendances.forEach((attendance, index) => {
+      const internalPerson = attendance.intPid == null ? null : internalPeopleById.get(attendance.intPid);
+      const row = {
+        ...attendance,
+        displayNo: index + 1,
+        department:
+          attendance.department ||
+          (attendance.channel === "INTERNAL"
+            ? meeting.internalMeetingName.trim() || "ผู้ปฏิบัติงาน"
+            : meeting.externalMeetingName?.trim() || "ผู้ร่วมประชุม"),
+        email: attendance.email || internalPerson?.email || null,
+        phone: attendance.phone || internalPerson?.phone || null,
+      };
+      drawRow(columns.map((column) => column.value(row)), { signature: signatures.get(attendance.id) });
     });
   }
 
@@ -210,9 +295,9 @@ export async function GET(_request: Request, { params }: Params) {
     doc.page.margins.bottom = 0; // prevent auto page-break while writing in the footer area
     doc
       .font("th")
-      .fontSize(10)
-      .fillColor("#64748b")
-      .text(`หน้า ${i - range.start + 1}/${range.count}`, left, doc.page.height - 28, {
+      .fontSize(11)
+      .fillColor("#334155")
+      .text(`หน้า ${i - range.start + 1} / ${range.count}`, left, doc.page.height - 28, {
         width: contentWidth,
         align: "right",
       });
@@ -220,7 +305,7 @@ export async function GET(_request: Request, { params }: Params) {
 
   doc.end();
   const buffer = await done;
-  const filename = `${meeting.meetingId}-attendance.pdf`;
+  const filename = `${meeting.meetingId}-attendance${isPortrait ? "-portrait" : ""}.pdf`;
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",

@@ -133,7 +133,10 @@ export async function GET(_request: Request, { params }: Params) {
     dataRow.values = [
       row.personNo,
       `${row.fname} ${row.lname}`,
-      row.department,
+      row.department ||
+        (row.channel === "INTERNAL"
+          ? meeting.internalMeetingName.trim() || "ผู้ปฏิบัติงาน"
+          : meeting.externalMeetingName?.trim() || "ผู้ร่วมประชุม"),
       row.position,
       formatThaiDateTime(row.timestamp),
     ];

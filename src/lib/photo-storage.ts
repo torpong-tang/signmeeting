@@ -5,7 +5,9 @@ import { randomUUID } from "crypto";
 // Attendee photos are stored on disk under uploads/meetings/<meetingId>/ instead
 // of as base64 blobs in SQLite. Keeps the DB small and payloads light; the files
 // are served back through an authenticated route, never as public static assets.
-const UPLOAD_ROOT = process.env.SIGNMEETING_UPLOAD_DIR || path.join(process.cwd(), "uploads");
+const UPLOAD_ROOT =
+  process.env.SIGNMEETING_UPLOAD_DIR ||
+  path.join(/*turbopackIgnore: true*/ process.cwd(), "uploads");
 
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": ".png",
@@ -32,6 +34,22 @@ export async function saveMeetingPhotoFile(meetingId: string, file: File) {
     meetingId,
     `${randomUUID()}${extensionFor(file.name, file.type)}`,
   );
+  const absolutePath = path.join(UPLOAD_ROOT, relativePath);
+  await mkdir(path.dirname(absolutePath), { recursive: true });
+  await writeFile(absolutePath, buffer);
+  return relativePath;
+}
+
+export async function saveAttendanceSignatureFile(meetingId: string, signatureData: string) {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(signatureData);
+  if (!match) throw new Error("Invalid signature image");
+
+  const buffer = Buffer.from(match[1], "base64");
+  if (buffer.length === 0 || buffer.length > 512 * 1024) {
+    throw new Error("Signature image must not exceed 512 KB");
+  }
+
+  const relativePath = path.posix.join("meetings", meetingId, "signatures", `${randomUUID()}.png`);
   const absolutePath = path.join(UPLOAD_ROOT, relativePath);
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, buffer);

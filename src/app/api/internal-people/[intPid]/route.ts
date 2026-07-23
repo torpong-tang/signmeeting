@@ -9,13 +9,18 @@ export async function PUT(request: Request, { params }: Params) {
   if (denied) return denied;
   const { intPid } = await params;
   const body = await request.json();
+  const email = String(body.email ?? "").trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: "Invalid e-mail address" }, { status: 400 });
+  }
   const person = await prisma.internalPerson.update({
     where: { intPid: Number(intPid) },
     data: {
       fname: String(body.fname ?? "").trim(),
       lname: String(body.lname ?? "").trim(),
-      department: String(body.department ?? "").trim(),
       position: String(body.position ?? "").trim(),
+      email: email || null,
+      phone: String(body.phone ?? "").trim() || null,
       isActive: Boolean(body.isActive ?? true),
     },
   });
