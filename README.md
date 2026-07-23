@@ -11,6 +11,8 @@ SignMeeting is a Next.js app for creating meeting attendance sessions, generatin
   - `สำหรับผู้ปฏิบัติงาน` for internal personnel.
   - `สำหรับผู้ร่วมประชุม` for external participants.
 - Internal personnel master data for dropdown registration.
+- Participant group and participant directory master data linked to each named external meeting.
+- Named external groups use a searchable participant dropdown during registration, with a manual-entry fallback when a name is not in the directory. Open external groups continue to use the standard free-entry form.
 - Meeting attendance table with live search, pagination, sorting, and export.
 - Attendance PDF export supports both landscape detail format and a compact portrait format with combined organization/contact fields.
 - QR Code new-tab view with meeting details and copy-as-image support.
@@ -31,6 +33,7 @@ The admin console is split by responsibility so feature work does not accumulate
 | `src/components/RegisterPage.tsx` | Public internal/external registration flow and signature capture. |
 | `src/components/signmeeting/MeetingFormFields.tsx` | Create/edit meeting form, group options, images, and meeting photos. |
 | `src/components/signmeeting/AttendanceTable.tsx` | Attendance search, sorting, pagination, and delete action. |
+| `src/components/signmeeting/ParticipantDirectory.tsx` | Admin management for participant groups and prepared participant names. |
 | `src/components/signmeeting/ui.tsx` | Shared UI styles, date formatting, sorting, highlighting, and pagination controls. |
 | `src/components/signmeeting/types.ts` | Shared Meeting, Attendance, form, and image types. |
 | `src/lib/meeting-input.ts` | Shared server-side normalization and validation for meeting create/update APIs. |

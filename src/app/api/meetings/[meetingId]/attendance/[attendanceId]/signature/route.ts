@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { readMeetingPhotoFile } from "@/lib/photo-storage";
+import { readMeetingFile } from "@/lib/meeting-file-storage";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ meetingId: string; attendanceId: string }> };
@@ -18,7 +18,7 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ message: "Signature not found" }, { status: 404 });
   }
 
-  const image = await readMeetingPhotoFile(attendance.signaturePath);
+    const image = await readMeetingFile(attendance.signaturePath);
   return new NextResponse(new Uint8Array(image), {
     headers: {
       "Content-Type": "image/png",

@@ -49,6 +49,30 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ message: "กรุณาเลือกผู้ปฏิบัติงานที่ใช้งานอยู่" }, { status: 400 });
   }
 
+  const parsedParticipantId = Number(body.participantId);
+  const participantId =
+    channel === AttendanceType.EXTERNAL &&
+    Number.isInteger(parsedParticipantId) &&
+    parsedParticipantId > 0
+      ? parsedParticipantId
+      : null;
+  const participantPerson = participantId && meeting.externalParticipantGroupId
+    ? await prisma.participantPerson.findFirst({
+        where: {
+          participantId,
+          groupId: meeting.externalParticipantGroupId,
+          isActive: true,
+          group: { isActive: true },
+        },
+      })
+    : null;
+  if (participantId && !participantPerson) {
+    return NextResponse.json(
+      { message: "รายชื่อผู้ร่วมประชุมไม่อยู่ในกลุ่มที่กำหนด หรือไม่ได้ใช้งานแล้ว" },
+      { status: 400 },
+    );
+  }
+
   const attendanceData = channel === AttendanceType.INTERNAL && internalPerson
     ? {
         fname: internalPerson.fname,
@@ -58,6 +82,15 @@ export async function POST(request: Request, { params }: Params) {
         email: internalPerson.email,
         phone: internalPerson.phone,
       }
+    : channel === AttendanceType.EXTERNAL && participantPerson
+      ? {
+          fname: participantPerson.fname,
+          lname: participantPerson.lname,
+          department: meeting.externalMeetingName?.trim() || "ผู้ร่วมประชุม",
+          position: participantPerson.position,
+          email: String(body.email ?? "").trim() || participantPerson.email?.trim() || "",
+          phone: String(body.phone ?? "").trim() || participantPerson.phone?.trim() || "",
+        }
     : {
         fname: String(body.fname ?? "").trim(),
         lname: String(body.lname ?? "").trim(),
@@ -70,10 +103,7 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ message: "กรุณากรอกข้อมูลให้ครบถ้วน" }, { status: 400 });
   }
   if (channel === AttendanceType.EXTERNAL) {
-    if (!attendanceData.email || !attendanceData.phone) {
-      return NextResponse.json({ message: "กรุณากรอก E-mail และโทรศัพท์" }, { status: 400 });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendanceData.email)) {
+    if (attendanceData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(attendanceData.email)) {
       return NextResponse.json({ message: "กรุณากรอก E-mail ให้ถูกต้อง" }, { status: 400 });
     }
   }
@@ -91,6 +121,7 @@ export async function POST(request: Request, { params }: Params) {
       meetingId,
       channel,
       intPid,
+      participantId,
       ...attendanceData,
       signatureData,
     });

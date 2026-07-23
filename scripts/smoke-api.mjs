@@ -1,5 +1,7 @@
 const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:3009";
 const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const signatureData =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
   method: "POST",
@@ -35,7 +37,7 @@ const createdResponse = await fetch(`${baseUrl}/api/meetings`, {
     meetingLocation: "Meeting Room A",
     meetingType: "EXTERNAL",
     internalMeetingName: "Smarterware",
-    externalMeetingName: "Vendor Team",
+    externalMeetingName: "",
   }),
 });
 
@@ -53,6 +55,7 @@ const attendanceResponse = await fetch(`${baseUrl}/api/meetings/${created.meetin
     lname: "Test",
     department: "Vendor",
     position: "Consultant",
+    signatureData,
   }),
 });
 

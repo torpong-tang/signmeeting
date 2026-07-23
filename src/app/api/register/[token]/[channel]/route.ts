@@ -20,10 +20,30 @@ export async function GET(_request: Request, { params }: Params) {
       attendanceChannel === AttendanceType.INTERNAL
         ? { qrTokenInt: token }
         : { qrTokenExt: token, meetingType: "EXTERNAL" },
-    // Only intPid is needed (to hide already-registered people from the
-    // dropdown); avoid exposing other attendees' personal data on this public
-    // endpoint.
-    include: { attendances: { orderBy: { personNo: "asc" }, select: { intPid: true } } },
+    // Only directory identifiers are returned for prior attendance records.
+    // Other attendees' personal data must not be exposed by this public route.
+    include: {
+      attendances: {
+        orderBy: { personNo: "asc" },
+        select: { intPid: true, participantId: true },
+      },
+      externalParticipantGroup: {
+        select: {
+          people: {
+            where: { isActive: true },
+            orderBy: [{ fname: "asc" }, { lname: "asc" }],
+            select: {
+              participantId: true,
+              fname: true,
+              lname: true,
+              position: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!meeting) {
@@ -35,8 +55,10 @@ export async function GET(_request: Request, { params }: Params) {
   const deadline = getDeadline(meeting.meetingDate, meeting.startTime, limitMinutes);
   const isClosed = !meeting.allowLateRegister && Date.now() > deadline.getTime();
 
+  const { externalParticipantGroup, ...publicMeeting } = meeting;
   return NextResponse.json({
-    meeting,
+    meeting: publicMeeting,
+    participantPeople: externalParticipantGroup?.people ?? [],
     channel: attendanceChannel,
     limitMinutes,
     deadline: deadline.toISOString(),

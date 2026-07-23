@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, requireAuth } from "@/lib/auth";
-import { deleteMeetingPhotoFile, readMeetingPhotoFile, saveMeetingPhotoFile } from "@/lib/photo-storage";
+import { deleteMeetingFile, readMeetingFile, saveMeetingPhotoFile } from "@/lib/meeting-file-storage";
 
 type Params = { params: Promise<{ meetingId: string; channel: string }> };
 
@@ -67,7 +67,7 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   try {
-    const file = await readMeetingPhotoFile(storagePath);
+    const file = await readMeetingFile(storagePath);
     return new NextResponse(new Uint8Array(file), {
       headers: { "Content-Type": mimeType, "Cache-Control": "private, max-age=3600" },
     });
@@ -135,10 +135,10 @@ export async function POST(request: Request, { params }: Params) {
       }),
     ]);
   } catch (error) {
-    await deleteMeetingPhotoFile(storagePath);
+      await deleteMeetingFile(storagePath);
     throw error;
   }
-  await deleteMeetingPhotoFile(oldStoragePath);
+    await deleteMeetingFile(oldStoragePath);
 
   return NextResponse.json(updated);
 }
@@ -187,7 +187,7 @@ export async function DELETE(_request: Request, { params }: Params) {
       },
     }),
   ]);
-  await deleteMeetingPhotoFile(storagePath);
+  await deleteMeetingFile(storagePath);
 
   return NextResponse.json(updated);
 }

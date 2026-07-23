@@ -73,6 +73,12 @@ export function formatThaiDate(value: string) {
   return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year + 543}`;
 }
 
+export function formatTimeRange(startTime: string, endTime?: string | null) {
+  const start = startTime ? startTime.slice(0, 5) : "-";
+  const end = endTime ? endTime.slice(0, 5) : "-";
+  return end !== "-" ? `${start}-${end}` : start;
+}
+
 export function formatThaiDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;

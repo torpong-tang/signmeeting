@@ -7,6 +7,8 @@ export type Attendance = {
   personNo: number;
   meetingId: string;
   channel: AttendanceType;
+  intPid: number | null;
+  participantId: number | null;
   fname: string;
   lname: string;
   department: string;
@@ -28,6 +30,24 @@ export type InternalPerson = {
   isActive: boolean;
 };
 
+export type ParticipantPerson = {
+  participantId: number;
+  groupId: number;
+  fname: string;
+  lname: string;
+  position: string;
+  email: string | null;
+  phone: string | null;
+  isActive: boolean;
+};
+
+export type ParticipantGroup = {
+  groupId: number;
+  name: string;
+  isActive: boolean;
+  people: ParticipantPerson[];
+};
+
 export type MeetingPhoto = {
   id: string;
   meetingId: string;
@@ -35,6 +55,15 @@ export type MeetingPhoto = {
   mimeType: string;
   size: number;
   data?: string;
+  createdAt: string;
+};
+
+export type MeetingDocument = {
+  id: string;
+  meetingId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
   createdAt: string;
 };
 
@@ -65,6 +94,7 @@ export type Meeting = {
   meetingType: MeetingType;
   internalMeetingName: string;
   externalMeetingName: string | null;
+  externalParticipantGroupId: number | null;
   internalGroupImageFilename: string | null;
   internalGroupImageMime: string | null;
   internalGroupImageSize: number | null;
@@ -80,6 +110,7 @@ export type Meeting = {
   updatedAt: string;
   attendances: Attendance[];
   photos: MeetingPhoto[];
+  documents: MeetingDocument[];
 };
 
 export type ConfigValues = {
@@ -97,6 +128,7 @@ export type MeetingForm = {
   meetingType: MeetingType;
   internalMeetingName: string;
   externalMeetingName: string;
+  externalParticipantGroupId: number | null;
   externalGroupMode: "NAMED" | "OPEN";
   allowLateRegister: boolean;
 };

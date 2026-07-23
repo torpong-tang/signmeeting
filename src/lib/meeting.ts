@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { appOriginPath } from "@/lib/paths";
 import { randomBytes } from "crypto";
-import { deleteMeetingPhotoFile, saveAttendanceSignatureFile } from "@/lib/photo-storage";
+import { deleteMeetingFile, saveAttendanceSignatureFile } from "@/lib/meeting-file-storage";
 
 export async function nextMeetingId() {
   const year = new Date().getFullYear();
@@ -47,6 +47,7 @@ type AttendanceInput = {
   meetingId: string;
   channel: Prisma.AttendanceCreateManyInput["channel"];
   intPid?: number | null;
+  participantId?: number | null;
   fname: string;
   lname: string;
   department: string;
@@ -66,6 +67,9 @@ function normalize(value: string) {
 function buildDedupeKey(input: AttendanceInput) {
   if (input.channel === "INTERNAL" && input.intPid != null) {
     return `int:${input.intPid}`;
+  }
+  if (input.channel === "EXTERNAL" && input.participantId != null) {
+    return `participant:${input.participantId}`;
   }
   return `ext:${normalize(input.fname)}|${normalize(input.lname)}|${normalize(input.department)}`;
 }
@@ -99,6 +103,7 @@ export async function createAttendance(input: AttendanceInput) {
           meetingId: input.meetingId,
           channel: input.channel,
           intPid: input.intPid ?? null,
+          participantId: input.participantId ?? null,
           fname: input.fname,
           lname: input.lname,
           department: input.department,
@@ -114,18 +119,18 @@ export async function createAttendance(input: AttendanceInput) {
         // A concurrent insert won the race. Tell the two conflicts apart by
         // which unique index tripped.
         if (JSON.stringify(error.meta?.target ?? "").includes("dedupeKey")) {
-          await deleteMeetingPhotoFile(signaturePath);
+          await deleteMeetingFile(signaturePath);
           throw new DuplicateAttendanceError();
         }
         if (attempt < maxAttempts) {
           continue; // personNo collision — recompute and retry
         }
       }
-      await deleteMeetingPhotoFile(signaturePath);
+      await deleteMeetingFile(signaturePath);
       throw error;
     }
   }
-  await deleteMeetingPhotoFile(signaturePath);
+  await deleteMeetingFile(signaturePath);
   throw new Error("Unable to assign a unique attendance number");
 }
 

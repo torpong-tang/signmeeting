@@ -7,6 +7,7 @@ PUBLIC_URL="http://localhost:${PORT}"
 LOG_FILE="/tmp/signmeeting-smoke.log"
 COOKIE_FILE="/tmp/signmeeting-smoke-cookie.txt"
 TOMORROW="$(date -d tomorrow +%F)"
+SIGNATURE_DATA="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
 cd "$(dirname "$0")/.."
 
@@ -31,13 +32,13 @@ curl -fsS -c "$COOKIE_FILE" -X POST "$BASE_URL/api/auth/login" \
 created="$(curl -fsS -b "$COOKIE_FILE" -X POST "$BASE_URL/api/meetings" \
   -H "Content-Type: application/json" \
   -H "Origin: $PUBLIC_URL" \
-  --data "{\"meetingProjectName\":\"SignMeeting Pilot\",\"meetingName\":\"Kickoff Meeting\",\"meetingDate\":\"$TOMORROW\",\"startTime\":\"09:30\",\"endTime\":\"10:30\",\"meetingLocation\":\"Meeting Room A\",\"meetingType\":\"EXTERNAL\",\"internalMeetingName\":\"Smarterware\",\"externalMeetingName\":\"Vendor Team\"}")"
+  --data "{\"meetingProjectName\":\"SignMeeting Pilot\",\"meetingName\":\"Kickoff Meeting\",\"meetingDate\":\"$TOMORROW\",\"startTime\":\"09:30\",\"endTime\":\"10:30\",\"meetingLocation\":\"Meeting Room A\",\"meetingType\":\"EXTERNAL\",\"internalMeetingName\":\"Smarterware\",\"externalMeetingName\":\"\"}")"
 
 meeting_id="$(printf '%s' "$created" | grep -o '"meetingId":"[^"]*"' | head -1 | cut -d '"' -f4)"
 
 attendance="$(curl -fsS -X POST "$BASE_URL/api/meetings/$meeting_id/attendance" \
   -H "Content-Type: application/json" \
-  --data '{"channel":"EXTERNAL","fname":"Somchai","lname":"Test","department":"Vendor","position":"Consultant"}')"
+  --data "{\"channel\":\"EXTERNAL\",\"fname\":\"Somchai\",\"lname\":\"Test\",\"department\":\"Vendor\",\"position\":\"Consultant\",\"signatureData\":\"$SIGNATURE_DATA\"}")"
 
 meeting="$(curl -fsS -b "$COOKIE_FILE" "$BASE_URL/api/meetings/$meeting_id")"
 

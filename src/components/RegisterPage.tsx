@@ -9,6 +9,7 @@ import {
   PenLine,
   Save,
   Search,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -27,7 +28,8 @@ type Meeting = {
   meetingType: "INTERNAL" | "EXTERNAL";
   internalMeetingName: string;
   externalMeetingName: string | null;
-  attendances?: { intPid: number | null }[];
+  externalParticipantGroupId: number | null;
+  attendances?: { intPid: number | null; participantId: number | null }[];
 };
 
 type RegisterPayload = {
@@ -36,6 +38,7 @@ type RegisterPayload = {
   limitMinutes: number;
   deadline: string;
   isClosed: boolean;
+  participantPeople: ParticipantPerson[];
 };
 
 type Person = {
@@ -44,6 +47,27 @@ type Person = {
   lname: string;
   department: string;
   position: string;
+  email: string | null;
+  phone: string | null;
+};
+
+type ParticipantPerson = {
+  participantId: number;
+  fname: string;
+  lname: string;
+  position: string;
+  email: string | null;
+  phone: string | null;
+};
+
+type DirectoryPerson = {
+  id: number;
+  fname: string;
+  lname: string;
+  department: string;
+  position: string;
+  email: string;
+  phone: string;
 };
 
 const inputBase =
@@ -80,12 +104,14 @@ function channelGroupName(meeting: Meeting, channel: Channel) {
 // native <select>).
 function PersonCombobox({
   people,
+  placeholder,
   selectedId,
   onSelect,
 }: {
-  people: Person[];
+  people: DirectoryPerson[];
+  placeholder: string;
   selectedId: string;
-  onSelect: (person: Person | null) => void;
+  onSelect: (person: DirectoryPerson | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -114,7 +140,7 @@ function PersonCombobox({
         <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input
           className={`${inputBase} pl-10`}
-        placeholder="พิมพ์เพื่อค้นหาและเลือกผู้ปฏิบัติงาน..."
+          placeholder={placeholder}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -130,11 +156,11 @@ function PersonCombobox({
             <li className="px-3 py-3 text-sm font-normal text-slate-400">ไม่พบรายชื่อ</li>
           ) : (
             filtered.map((person) => (
-              <li key={person.intPid}>
+              <li key={person.id}>
                 <button
                   type="button"
                   className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition hover:bg-slate-800 ${
-                    String(person.intPid) === selectedId ? "bg-emerald-500/15" : ""
+                    String(person.id) === selectedId ? "bg-emerald-500/15" : ""
                   }`}
                   onClick={() => {
                     onSelect(person);
@@ -263,8 +289,11 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (value: st
 export function RegisterPage({ meetingId, channel }: { meetingId: string; channel: Channel }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
+  const [participantPeople, setParticipantPeople] = useState<ParticipantPerson[]>([]);
   const [registeredIntPids, setRegisteredIntPids] = useState<number[]>([]);
+  const [registeredParticipantIds, setRegisteredParticipantIds] = useState<number[]>([]);
   const [selectedPerson, setSelectedPerson] = useState("");
+  const [manualExternalEntry, setManualExternalEntry] = useState(false);
   const [comboboxKey, setComboboxKey] = useState(0);
   const [signatureData, setSignatureData] = useState("");
   const [form, setForm] = useState({
@@ -299,6 +328,12 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
             .map((attendance) => attendance.intPid)
             .filter((intPid): intPid is number => intPid != null),
         );
+        setRegisteredParticipantIds(
+          (registerData.meeting.attendances ?? [])
+            .map((attendance) => attendance.participantId)
+            .filter((participantId): participantId is number => participantId != null),
+        );
+        setParticipantPeople(registerData.participantPeople ?? []);
         setIsClosed(registerData.isClosed);
         setClosedMessage(`หมดเวลาลงทะเบียนแล้ว (กำหนด ${registerData.limitMinutes} นาทีหลังเวลาเริ่มประชุม)`);
         setPeople((await peopleResponse.json()) as Person[]);
@@ -311,9 +346,8 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
     load();
   }, [channel, meetingId]);
 
-  function selectInternalPerson(value: string) {
-    setSelectedPerson(value);
-    const person = people.find((item) => String(item.intPid) === value);
+  function selectDirectoryPerson(person: DirectoryPerson | null) {
+    setSelectedPerson(person ? String(person.id) : "");
     if (!person) {
       setForm({ fname: "", lname: "", department: "", position: "", email: "", phone: "" });
       return;
@@ -323,13 +357,23 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
       lname: person.lname,
       department: person.department,
       position: person.position,
-      email: "",
-      phone: "",
+      email: person.email,
+      phone: person.phone,
     });
   }
 
   async function submit(mode: "close" | "continue") {
     const hasExternalGroupName = Boolean(meeting?.externalMeetingName?.trim());
+    const usesExternalDirectory =
+      channel === "external" && Boolean(meeting?.externalParticipantGroupId);
+    if (channel === "internal" && !selectedPerson) {
+      setError("กรุณาเลือกชื่อผู้ปฏิบัติงาน");
+      return;
+    }
+    if (usesExternalDirectory && !manualExternalEntry && !selectedPerson) {
+      setError("กรุณาเลือกชื่อผู้ร่วมประชุม หรือเลือกกรอกข้อมูลเอง");
+      return;
+    }
     if (
       !form.fname ||
       !form.lname ||
@@ -339,11 +383,11 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
       setError("กรุณากรอกข้อมูลให้ครบถ้วน");
       return;
     }
-    if (channel === "external" && (!form.email || !form.phone)) {
-      setError("กรุณากรอก E-mail และโทรศัพท์");
-      return;
-    }
-    if (channel === "external" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    if (
+      channel === "external" &&
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+    ) {
       setError("กรุณากรอก E-mail ให้ถูกต้อง");
       return;
     }
@@ -363,6 +407,10 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
           ...form,
           channel: channel === "internal" ? "INTERNAL" : "EXTERNAL",
           intPid: channel === "internal" ? Number(selectedPerson) || null : null,
+          participantId:
+            usesExternalDirectory && !manualExternalEntry
+              ? Number(selectedPerson) || null
+              : null,
           signatureData,
         }),
       });
@@ -376,6 +424,11 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
         const registeredId = Number(selectedPerson);
         if (Number.isInteger(registeredId)) {
           setRegisteredIntPids((current) => [...current, registeredId]);
+        }
+      } else if (usesExternalDirectory && !manualExternalEntry) {
+        const registeredId = Number(selectedPerson);
+        if (Number.isInteger(registeredId)) {
+          setRegisteredParticipantIds((current) => [...current, registeredId]);
         }
       }
       if (mode === "continue") {
@@ -505,28 +558,148 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
               <div className="grid gap-4">
                 {channel === "internal" && (
                   <div className="grid gap-2 font-semibold text-slate-200">
-                    <span>เลือกชื่อ - นามสกุล</span>
+                    <span>
+                      เลือกชื่อ - นามสกุล{" "}
+                      <span aria-hidden="true" className="text-rose-400">
+                        *
+                      </span>
+                    </span>
                     <PersonCombobox
                       key={comboboxKey}
-                      people={people.filter((person) => !registeredIntPids.includes(person.intPid))}
+                      people={people
+                        .filter((person) => !registeredIntPids.includes(person.intPid))
+                        .map((person) => ({
+                          id: person.intPid,
+                          fname: person.fname,
+                          lname: person.lname,
+                          department: person.department,
+                          position: person.position,
+                          email: person.email ?? "",
+                          phone: person.phone ?? "",
+                        }))}
+                      placeholder="พิมพ์เพื่อค้นหาและเลือกผู้ปฏิบัติงาน..."
                       selectedId={selectedPerson}
-                      onSelect={(person) => selectInternalPerson(person ? String(person.intPid) : "")}
+                      onSelect={selectDirectoryPerson}
                     />
                   </div>
                 )}
 
+                {channel === "external" && meeting.externalParticipantGroupId && (
+                  <div className="grid gap-3 rounded-xl border border-cyan-400/30 bg-cyan-500/10 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div className="grid flex-1 gap-2 font-semibold text-slate-200">
+                        <span>
+                          {manualExternalEntry
+                            ? "เพิ่มข้อมูลผู้ร่วมประชุม"
+                            : "เลือกชื่อ - นามสกุลผู้ร่วมประชุม"}
+                          {!manualExternalEntry && (
+                            <span aria-hidden="true" className="text-rose-400">
+                              {" "}
+                              *
+                            </span>
+                          )}
+                        </span>
+                        {!manualExternalEntry && (
+                          <PersonCombobox
+                            key={comboboxKey}
+                            people={participantPeople
+                              .filter((person) => !registeredParticipantIds.includes(person.participantId))
+                              .map((person) => ({
+                                id: person.participantId,
+                                fname: person.fname,
+                                lname: person.lname,
+                                department: meeting.externalMeetingName ?? "",
+                                position: person.position,
+                                email: person.email ?? "",
+                                phone: person.phone ?? "",
+                              }))}
+                            placeholder="พิมพ์เพื่อค้นหาและเลือกผู้ร่วมประชุม..."
+                            selectedId={selectedPerson}
+                            onSelect={selectDirectoryPerson}
+                          />
+                        )}
+                      </div>
+                      <button
+                        className={`${buttonBase} min-h-11 ${
+                          manualExternalEntry
+                            ? "bg-cyan-500 text-slate-950 hover:bg-cyan-300"
+                            : "bg-amber-400 text-slate-950 hover:bg-amber-300"
+                        }`}
+                        onClick={() => {
+                          setManualExternalEntry((current) => !current);
+                          setSelectedPerson("");
+                          setForm({
+                            fname: "",
+                            lname: "",
+                            department: meeting.externalMeetingName ?? "",
+                            position: "",
+                            email: "",
+                            phone: "",
+                          });
+                          setComboboxKey((key) => key + 1);
+                        }}
+                        type="button"
+                      >
+                        {manualExternalEntry ? (
+                          <>
+                            <Users className="h-5 w-5" /> เลือกจากรายชื่อ
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-5 w-5" /> ไม่พบชื่อ กรอกข้อมูลเอง
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-sm text-cyan-100">
+                      กลุ่มผู้ร่วมประชุม: <strong>{meeting.externalMeetingName}</strong>
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="ชื่อ">
-                    <input className={inputBase} disabled={channel === "internal"} required value={form.fname} onChange={(event) => setForm({ ...form, fname: event.target.value })} />
+                  <Field label="ชื่อ" required>
+                    <input
+                      aria-label="ชื่อ"
+                      className={inputBase}
+                      disabled={
+                        channel === "internal" ||
+                        (channel === "external" &&
+                          Boolean(meeting.externalParticipantGroupId) &&
+                          !manualExternalEntry)
+                      }
+                      required
+                      value={form.fname}
+                      onChange={(event) => setForm({ ...form, fname: event.target.value })}
+                    />
                   </Field>
-                  <Field label="นามสกุล">
-                    <input className={inputBase} disabled={channel === "internal"} required value={form.lname} onChange={(event) => setForm({ ...form, lname: event.target.value })} />
+                  <Field label="นามสกุล" required>
+                    <input
+                      aria-label="นามสกุล"
+                      className={inputBase}
+                      disabled={
+                        channel === "internal" ||
+                        (channel === "external" &&
+                          Boolean(meeting.externalParticipantGroupId) &&
+                          !manualExternalEntry)
+                      }
+                      required
+                      value={form.lname}
+                      onChange={(event) => setForm({ ...form, lname: event.target.value })}
+                    />
                   </Field>
                 </div>
                 {channel === "external" && (
                   <>
-                    <Field label="ตำแหน่ง">
-                      <input className={inputBase} required value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
+                    <Field label="ตำแหน่ง" required>
+                      <input
+                        aria-label="ตำแหน่ง"
+                        className={inputBase}
+                        disabled={Boolean(meeting.externalParticipantGroupId) && !manualExternalEntry}
+                        required
+                        value={form.position}
+                        onChange={(event) => setForm({ ...form, position: event.target.value })}
+                      />
                     </Field>
                     {meeting.externalMeetingName?.trim() ? (
                       <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">
@@ -534,8 +707,9 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
                         <p className="mt-1 font-semibold text-emerald-100">{meeting.externalMeetingName}</p>
                       </div>
                     ) : (
-                      <Field label="หน่วยงาน/สังกัด">
+                      <Field label="หน่วยงาน/สังกัด" required>
                         <input
+                          aria-label="หน่วยงาน/สังกัด"
                           className={inputBase}
                           data-testid="external-department-input"
                           required
@@ -546,10 +720,10 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
                     )}
                     <div className="grid gap-4 md:grid-cols-2">
                       <Field label="โทรศัพท์">
-                        <input className={inputBase} inputMode="tel" required type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+                        <input className={inputBase} inputMode="tel" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
                       </Field>
                       <Field label="E-mail">
-                        <input className={inputBase} required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+                        <input className={inputBase} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
                       </Field>
                     </div>
                   </>
@@ -583,12 +757,25 @@ export function RegisterPage({ meetingId, channel }: { meetingId: string; channe
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="grid gap-2 font-semibold text-slate-200">
       <span className="inline-flex items-center gap-2">
         <Users className="h-4 w-4 text-emerald-300" />
         {label}
+        {required && (
+          <span aria-hidden="true" className="text-rose-400">
+            *
+          </span>
+        )}
       </span>
       {children}
     </label>

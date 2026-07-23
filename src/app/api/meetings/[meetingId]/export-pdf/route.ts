@@ -3,7 +3,7 @@ import path from "path";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { readMeetingPhotoFile } from "@/lib/photo-storage";
+import { readMeetingFile } from "@/lib/meeting-file-storage";
 
 type Params = { params: Promise<{ meetingId: string }> };
 
@@ -263,7 +263,7 @@ export async function GET(request: Request, { params }: Params) {
       orderedAttendances.map(async (attendance) => {
         if (!attendance.signaturePath) return;
         try {
-          signatures.set(attendance.id, await readMeetingPhotoFile(attendance.signaturePath));
+        signatures.set(attendance.id, await readMeetingFile(attendance.signaturePath));
         } catch {
           // Keep the report usable when an old signature file is unavailable.
         }

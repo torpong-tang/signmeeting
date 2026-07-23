@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { saveMeetingPhotoFile } from "@/lib/photo-storage";
+import { saveMeetingPhotoFile } from "@/lib/meeting-file-storage";
 
 type Params = { params: Promise<{ meetingId: string }> };
 

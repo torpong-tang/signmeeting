@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { deleteMeetingPhotoFile, readMeetingPhotoFile } from "@/lib/photo-storage";
+import { deleteMeetingFile, readMeetingFile } from "@/lib/meeting-file-storage";
 
 type Params = { params: Promise<{ meetingId: string; photoId: string }> };
 
@@ -17,7 +17,7 @@ export async function GET(_request: Request, { params }: Params) {
   // New photos live on disk; legacy rows may still carry a base64 data URL.
   if (photo.storagePath) {
     try {
-      const file = await readMeetingPhotoFile(photo.storagePath);
+      const file = await readMeetingFile(photo.storagePath);
       return new NextResponse(new Uint8Array(file), {
         headers: { "Content-Type": photo.mimeType, "Cache-Control": "private, max-age=3600" },
       });
@@ -42,7 +42,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   const { meetingId, photoId } = await params;
   const photo = await prisma.meetingPhoto.findFirst({ where: { id: photoId, meetingId } });
   if (photo) {
-    await deleteMeetingPhotoFile(photo.storagePath);
+    await deleteMeetingFile(photo.storagePath);
     await prisma.meetingPhoto.deleteMany({ where: { id: photoId, meetingId } });
   }
   return NextResponse.json({ ok: true });

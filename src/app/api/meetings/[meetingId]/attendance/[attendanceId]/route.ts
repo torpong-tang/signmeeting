@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { deleteMeetingPhotoFile } from "@/lib/photo-storage";
+import { deleteMeetingFile } from "@/lib/meeting-file-storage";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ meetingId: string; attendanceId: string }> };
@@ -19,6 +19,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
 
   await prisma.attendance.delete({ where: { id: attendance.id } });
-  await deleteMeetingPhotoFile(attendance.signaturePath);
+    await deleteMeetingFile(attendance.signaturePath);
   return NextResponse.json({ ok: true });
 }

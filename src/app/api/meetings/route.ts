@@ -16,6 +16,10 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
       },
+      documents: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
+      },
     },
   });
   return NextResponse.json(meetings);
@@ -30,6 +34,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: normalized.error }, { status: 400 });
   }
   const origin = request.headers.get("origin") ?? new URL(request.url).origin;
+  let externalParticipantGroupId: number | null = null;
+  let externalMeetingName: string | null = null;
+  if (normalized.meetingType === "EXTERNAL" && normalized.externalParticipantGroupId) {
+    const participantGroup = await prisma.participantGroup.findFirst({
+      where: { groupId: normalized.externalParticipantGroupId, isActive: true },
+      select: { groupId: true, name: true },
+    });
+    if (!participantGroup) {
+      return NextResponse.json(
+        { message: "กรุณาเลือกกลุ่มผู้ร่วมประชุมที่ยังใช้งานอยู่" },
+        { status: 400 },
+      );
+    }
+    externalParticipantGroupId = participantGroup.groupId;
+    externalMeetingName = participantGroup.name;
+  } else if (normalized.meetingType === "EXTERNAL" && normalized.externalMeetingName) {
+    return NextResponse.json(
+      { message: "กรุณาเลือกชื่อกลุ่มผู้ร่วมประชุมจาก Master Data" },
+      { status: 400 },
+    );
+  }
   const meetingId = await nextMeetingId();
   const qrTokenInt = createRegisterToken();
   const qrTokenExt = createRegisterToken();
@@ -46,14 +71,15 @@ export async function POST(request: Request) {
       meetingLocation: normalized.meetingLocation,
       meetingType: normalized.meetingType in MeetingType ? (normalized.meetingType as MeetingType) : MeetingType.EXTERNAL,
       internalMeetingName: normalized.internalMeetingName,
-      externalMeetingName: normalized.meetingType === "EXTERNAL" ? normalized.externalMeetingName : null,
+      externalMeetingName,
+      externalParticipantGroupId,
       allowLateRegister: body.allowLateRegister === true,
       qrTokenInt,
       qrTokenExt,
       qrUrlInt,
       qrUrlExt,
     },
-    include: { attendances: true, photos: true },
+    include: { attendances: true, photos: true, documents: true },
   });
 
   return NextResponse.json(meeting, { status: 201 });

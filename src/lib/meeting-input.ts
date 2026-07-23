@@ -12,6 +12,7 @@ export type NormalizedMeetingInput = {
   meetingType: string;
   internalMeetingName: string;
   externalMeetingName: string;
+  externalParticipantGroupId: number | null;
 };
 
 function defaultEndTime(startTime: string) {
@@ -46,6 +47,11 @@ export function normalizeMeetingInput(
   const meetingType = String(body.meetingType ?? "EXTERNAL");
   const internalMeetingName = String(body.internalMeetingName ?? "Smarterware").trim() || "Smarterware";
   const externalMeetingName = String(body.externalMeetingName ?? "").trim();
+  const rawExternalParticipantGroupId = Number(body.externalParticipantGroupId);
+  const externalParticipantGroupId =
+    Number.isInteger(rawExternalParticipantGroupId) && rawExternalParticipantGroupId > 0
+      ? rawExternalParticipantGroupId
+      : null;
 
   if (!meetingProjectName || !meetingName || !meetingDate || !startTime || !endTime || !meetingLocation) {
     return { error: "All meeting fields are required." };
@@ -76,5 +82,6 @@ export function normalizeMeetingInput(
     meetingType,
     internalMeetingName,
     externalMeetingName,
+    externalParticipantGroupId,
   };
 }

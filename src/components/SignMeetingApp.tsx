@@ -1,29 +1,19 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import {
   CheckCircle2,
   ClipboardList,
   ChevronDown,
-  Download,
-  Edit3,
   Eye,
   EyeOff,
-  FileDown,
-  FileSpreadsheet,
   Loader2,
   MapPin,
-  ExternalLink,
-  Plus,
   QrCode,
-  RefreshCw,
-  Repeat2,
-  Search,
   Settings,
-  Save,
   ShieldCheck,
   Trash2,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -36,28 +26,39 @@ import type {
   InternalPerson,
   Meeting,
   MeetingChangeLog,
+  MeetingDocument,
   MeetingForm,
   MeetingPhoto,
+  ParticipantGroup,
 } from "@/components/signmeeting/types";
-import { AttendanceTable } from "@/components/signmeeting/AttendanceTable";
+import { MeetingAttendancePanel } from "@/components/signmeeting/MeetingAttendancePanel";
+import {
+  InternalPeopleAdminContent,
+  SettingsAdminContent,
+} from "@/components/signmeeting/AdminModalContents";
 import { MeetingFormFields } from "@/components/signmeeting/MeetingFormFields";
+import {
+  MeetingQrPanel,
+  type QrItem,
+} from "@/components/signmeeting/MeetingQrPanel";
+import {
+  MeetingTable,
+  type MeetingSortKey,
+} from "@/components/signmeeting/MeetingTable";
+import { ParticipantDirectory } from "@/components/signmeeting/ParticipantDirectory";
 import {
   buttonTone,
   compareValues,
   Field,
   formatThaiDate,
+  formatTimeRange,
   getBangkokDateInput,
-  Highlight,
   iconButtonTone,
   includesQuery,
   inputBase,
   isPastMeetingTime,
-  PaginationControls,
-  SortableTh,
   type SortDirection,
 } from "@/components/signmeeting/ui";
-
-type MeetingSortKey = "meetingId" | "meetingProjectName" | "meetingName" | "meetingDate" | "meetingType" | "attendances";
 
 const emptyForm: MeetingForm = {
   meetingProjectName: "",
@@ -69,6 +70,7 @@ const emptyForm: MeetingForm = {
   meetingType: "EXTERNAL",
   internalMeetingName: "Smarterware",
   externalMeetingName: "",
+  externalParticipantGroupId: null,
   externalGroupMode: "NAMED",
   allowLateRegister: false,
 };
@@ -83,40 +85,6 @@ const emptyPerson = {
 };
 
 
-const thaiWeekdays = ["วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"];
-const thaiMonths = [
-  "มกราคม",
-  "กุมภาพันธ์",
-  "มีนาคม",
-  "เมษายน",
-  "พฤษภาคม",
-  "มิถุนายน",
-  "กรกฎาคม",
-  "สิงหาคม",
-  "กันยายน",
-  "ตุลาคม",
-  "พฤศจิกายน",
-  "ธันวาคม",
-];
-
-function formatThaiLongDate(value: string) {
-  if (!value) return "-";
-  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
-  if (!year || !month || !day) return value;
-  const weekday = thaiWeekdays[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
-  return `${weekday} ที่ ${day} เดือน ${thaiMonths[month - 1]} พ.ศ. ${year + 543}`;
-}
-
-function formatTime24(value: string) {
-  if (!value) return "-";
-  return value.slice(0, 5);
-}
-
-function formatTimeRange(startTime: string, endTime?: string | null) {
-  const start = formatTime24(startTime);
-  const end = formatTime24(endTime ?? "");
-  return end && end !== "-" ? `${start}-${end}` : start;
-}
 
 function groupNameLabel(label: string, name?: string | null) {
   const clean = String(name ?? "").trim();
@@ -238,439 +206,6 @@ function ConfirmModal({
   );
 }
 
-type QrItem = {
-  title: string;
-  label: string;
-  groupName: string;
-  groupImageUrl?: string;
-  url: string;
-};
-
-function QrPanel({ items, meeting }: { items: QrItem[]; meeting: Meeting }) {
-  const [images, setImages] = useState<Record<string, string>>({});
-  const [groupImages, setGroupImages] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let active = true;
-    async function blobToDataUrl(blob: Blob) {
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    }
-    Promise.all([
-      Promise.all(
-        items.map(async (item) => [item.url, await QRCode.toDataURL(item.url, { width: 260, margin: 2 })] as const),
-      ),
-      Promise.all(
-        items.map(async (item) => {
-          if (!item.groupImageUrl) return [item.url, ""] as const;
-          try {
-            const response = await fetch(item.groupImageUrl, { credentials: "include" });
-            if (!response.ok) return [item.url, ""] as const;
-            return [item.url, await blobToDataUrl(await response.blob())] as const;
-          } catch {
-            return [item.url, ""] as const;
-          }
-        }),
-      ),
-    ]).then(([qrEntries, groupEntries]) => {
-      if (!active) return;
-      setImages(Object.fromEntries(qrEntries));
-      setGroupImages(Object.fromEntries(groupEntries));
-    });
-    return () => {
-      active = false;
-    };
-  }, [items]);
-
-  function openQrTab() {
-    const qrPayload = {
-      meetingId: meeting.meetingId,
-      project: meeting.meetingProjectName,
-      name: meeting.meetingName,
-      date: formatThaiLongDate(meeting.meetingDate),
-      time: formatTimeRange(meeting.startTime, meeting.endTime),
-      dateLine: `${formatThaiLongDate(meeting.meetingDate)} เวลา ${formatTimeRange(meeting.startTime, meeting.endTime)} น.`,
-      locationLine: `ณ ${meeting.meetingLocation}`,
-      location: meeting.meetingLocation,
-      type: meeting.meetingType === "INTERNAL" ? "สำหรับบริษัทฯ" : "สำหรับผู้ร่วมประชุม",
-      items: items.map((item) => ({ ...item, groupImage: groupImages[item.url] ?? "", image: images[item.url] ?? "" })),
-    };
-    const html = `<!doctype html>
-<html lang="th">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${meeting.meetingId} QR Codes</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <style>
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      min-height:100vh;
-      font-family:"Prompt",Arial,sans-serif;
-      background:
-        radial-gradient(circle at 12% 0%, rgba(34,211,238,.28), transparent 34%),
-        radial-gradient(circle at 90% 10%, rgba(16,185,129,.18), transparent 30%),
-        #07111f;
-      color:#f8fafc;
-      padding:36px;
-    }
-    .shell{max-width:1280px;margin:0 auto}
-    .hero{
-      border:1px solid #334155;
-      border-radius:24px;
-      background:rgba(15,23,42,.78);
-      box-shadow:0 24px 70px rgba(0,0,0,.34);
-      padding:30px;
-      margin-bottom:34px;
-    }
-    .badge{
-      display:inline-flex;
-      border-radius:999px;
-      background:#22d3ee;
-      color:#06202c;
-      font-weight:700;
-      font-size:18px;
-      line-height:1.25;
-      padding:9px 18px;
-      margin-bottom:18px;
-    }
-    .hero-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap}
-    .copy-button{
-      border:0;
-      border-radius:14px;
-      background:#fbbf24;
-      color:#111827;
-      cursor:pointer;
-      font-family:"Prompt",Arial,sans-serif;
-      font-size:18px;
-      font-weight:800;
-      padding:13px 18px;
-      box-shadow:0 14px 32px rgba(251,191,36,.24);
-    }
-    .copy-button:active{transform:scale(.98)}
-    .copy-status{color:#a7f3d0;font-size:16px;font-weight:500;margin-top:12px;text-align:right}
-    .report-head{margin-top:24px;text-align:center}
-    .report-project{margin:0;color:#f8fafc;font-size:40px;font-weight:800;line-height:1.22}
-    .report-meeting{margin:18px 0 0;color:#f8fafc;font-size:30px;font-weight:700;line-height:1.3}
-    .report-date{margin:28px 0 0;color:#e2e8f0;font-size:24px;font-weight:400;line-height:1.45}
-    .report-location{margin:12px 0 0;color:#e2e8f0;font-size:24px;font-weight:400;line-height:1.45}
-    .grid{display:flex;gap:96px;justify-content:center;align-items:stretch;flex-wrap:wrap}
-    .card{
-      width:420px;
-      min-height:640px;
-      border:1px solid #334155;
-      border-radius:24px;
-      background:linear-gradient(180deg,#162235,#0f172a);
-      padding:28px;
-      text-align:center;
-      box-shadow:0 20px 55px rgba(0,0,0,.26);
-    }
-    .title{font-size:26px;font-weight:700;margin-bottom:22px;color:#e0f2fe;line-height:1.25}
-    .title-label{display:block}
-    .title-group{display:block;margin-top:8px;font-weight:800;color:#f8fafc}
-    .group-photo{display:grid;width:180px;height:104px;margin:0 auto 18px;place-items:center;overflow:hidden;border-radius:16px;border:1px solid #334155;background:linear-gradient(135deg,#0f172a,#083344);padding:9px}
-    .group-photo img{width:100%;height:86px;object-fit:contain;display:block;border-radius:12px}
-    .group-photo-empty{display:grid;height:100%;place-items:center;color:#bae6fd;font-weight:700}
-    .qr-img{width:300px;height:300px;border-radius:20px;background:white;padding:14px}
-    .url{display:block;margin-top:20px;color:#67e8f9;font-size:14px;word-break:break-all;line-height:1.45;text-decoration:underline;cursor:pointer}
-    .url:hover{color:#a5f3fc}
-    .hint{margin-top:14px;color:#67e8f9;font-size:17px;font-weight:600}
-    @media (max-width: 900px){
-      body{padding:18px}
-      .hero-head{justify-content:center;text-align:center}
-      .report-project{font-size:28px}
-      .report-meeting,.report-date,.report-location{font-size:20px}
-      .grid{gap:24px}
-      .card{width:100%}
-      .qr-img{width:min(300px,100%);height:auto}
-    }
-  </style>
-</head>
-<body>
-  <main class="shell">
-    <section class="hero">
-      <div class="hero-head">
-        <div>
-          <div class="badge">SignMeeting • ${meeting.meetingId}</div>
-        </div>
-        <div>
-          <button class="copy-button" id="copyQrImage" type="button">Copy QR Code ทั้งหมด</button>
-          <div class="copy-status" id="copyStatus"></div>
-        </div>
-      </div>
-      <div class="report-head">
-        <h1 class="report-project">${meeting.meetingProjectName}</h1>
-        <div class="report-meeting">${meeting.meetingName}</div>
-        <div class="report-date">${formatThaiLongDate(meeting.meetingDate)} เวลา ${formatTimeRange(meeting.startTime, meeting.endTime)} น.</div>
-        <div class="report-location">ณ ${meeting.meetingLocation}</div>
-      </div>
-    </section>
-    <div class="grid">
-    ${items
-      .map(
-        (item) => `<section class="card">
-      <div class="group-photo">${
-        groupImages[item.url]
-          ? `<img src="${groupImages[item.url]}" alt="${item.title} image" />`
-          : `<div class="group-photo-empty">${item.label}</div>`
-      }</div>
-      <div class="title"><span class="title-label">${item.label}</span>${item.groupName ? `<span class="title-group">(${item.groupName})</span>` : ""}</div>
-      <img class="qr-img" src="${images[item.url] ?? ""}" alt="${item.title}" />
-      <div class="hint">สแกน QR Code เพื่อลงทะเบียน</div>
-      <a class="url" href="${item.url}" target="_blank" rel="noopener noreferrer">${item.url}</a>
-    </section>`,
-      )
-      .join("")}
-    </div>
-  </main>
-  <script>
-    const qrPayload = ${JSON.stringify(qrPayload)};
-
-    function roundRect(ctx, x, y, width, height, radius) {
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      ctx.lineTo(x + radius, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.closePath();
-    }
-
-    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-      const words = String(text).split(" ");
-      let line = "";
-      let currentY = y;
-      for (const word of words) {
-        const testLine = line ? line + " " + word : word;
-        if (ctx.measureText(testLine).width > maxWidth && line) {
-          ctx.fillText(line, x, currentY);
-          line = word;
-          currentY += lineHeight;
-        } else {
-          line = testLine;
-        }
-      }
-      ctx.fillText(line, x, currentY);
-      return currentY + lineHeight;
-    }
-
-    function loadImage(src) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = src;
-      });
-    }
-
-    async function createMeetingQrBlob() {
-      if (document.fonts?.ready) {
-        await document.fonts.ready;
-        await document.fonts.load("800 44px Prompt");
-        await document.fonts.load("700 32px Prompt");
-      }
-      const qrImages = await Promise.all(qrPayload.items.map((item) => loadImage(item.image)));
-      const groupImages = await Promise.all(
-        qrPayload.items.map((item) => (item.groupImage ? loadImage(item.groupImage).catch(() => null) : Promise.resolve(null))),
-      );
-      const width = 1400;
-      const cardWidth = 430;
-      const cardHeight = 680;
-      const gap = qrPayload.items.length > 1 ? 140 : 0;
-      const cardsWidth = qrPayload.items.length * cardWidth + Math.max(0, qrPayload.items.length - 1) * gap;
-      const startX = (width - cardsWidth) / 2;
-      const height = 1040;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-
-      ctx.fillStyle = "#07111f";
-      ctx.fillRect(0, 0, width, height);
-      ctx.fillStyle = "#0f172a";
-      roundRect(ctx, 60, 46, width - 120, 250, 28);
-      ctx.fill();
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#22d3ee";
-      roundRect(ctx, width / 2 - 156, 76, 312, 44, 22);
-      ctx.fill();
-      ctx.fillStyle = "#06202c";
-      ctx.font = "700 22px Prompt, Arial";
-      ctx.fillText("SignMeeting • " + qrPayload.meetingId, width / 2, 105);
-
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "800 44px Prompt, Arial";
-      ctx.fillText(qrPayload.project, width / 2, 168, width - 180);
-      ctx.font = "700 32px Prompt, Arial";
-      ctx.fillText(qrPayload.name, width / 2, 225, width - 180);
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font = "400 26px Prompt, Arial";
-      ctx.fillText(qrPayload.dateLine, width / 2, 282, width - 180);
-      ctx.font = "400 25px Prompt, Arial";
-      ctx.fillText(qrPayload.locationLine, width / 2, 326, width - 180);
-
-      qrPayload.items.forEach((item, index) => {
-        const x = startX + index * (cardWidth + gap);
-        ctx.fillStyle = "#162235";
-        roundRect(ctx, x, 360, cardWidth, cardHeight - 40, 26);
-        ctx.fill();
-        const thumbWidth = 190;
-        const thumbHeight = 108;
-        const thumbX = x + (cardWidth - thumbWidth) / 2;
-        const thumbY = 392;
-        roundRect(ctx, thumbX, thumbY, thumbWidth, thumbHeight, 20);
-        ctx.fillStyle = "#082f49";
-        ctx.fill();
-        const groupImage = groupImages[index];
-        if (groupImage) {
-          ctx.save();
-          roundRect(ctx, thumbX, thumbY, thumbWidth, thumbHeight, 20);
-          ctx.clip();
-          const imageRatio = groupImage.width / groupImage.height;
-          const targetRatio = thumbWidth / thumbHeight;
-          let drawWidth = thumbWidth - 20;
-          let drawHeight = thumbHeight - 20;
-          if (imageRatio > targetRatio) {
-            drawHeight = drawWidth / imageRatio;
-          } else {
-            drawWidth = drawHeight * imageRatio;
-          }
-          const drawX = thumbX + (thumbWidth - drawWidth) / 2;
-          const drawY = thumbY + (thumbHeight - drawHeight) / 2;
-          ctx.drawImage(groupImage, drawX, drawY, drawWidth, drawHeight);
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "#bae6fd";
-          ctx.font = "700 24px Prompt, Arial";
-          ctx.textAlign = "center";
-          ctx.fillText(item.label, x + cardWidth / 2, thumbY + thumbHeight / 2 + 8);
-        }
-        ctx.fillStyle = "#e0f2fe";
-        ctx.font = "700 29px Prompt, Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(item.label, x + cardWidth / 2, 570);
-        if (item.groupName) {
-          ctx.font = "800 29px Prompt, Arial";
-          ctx.fillText("(" + item.groupName + ")", x + cardWidth / 2, 606);
-        }
-        ctx.fillStyle = "#ffffff";
-        roundRect(ctx, x + 65, 638, 300, 300, 22);
-        ctx.fill();
-        ctx.drawImage(qrImages[index], x + 73, 646, 284, 284);
-        ctx.fillStyle = "#67e8f9";
-        ctx.font = "600 18px Prompt, Arial";
-        ctx.fillText("สแกน QR Code เพื่อลงทะเบียน", x + cardWidth / 2, 976);
-        ctx.textAlign = "left";
-      });
-
-      return new Promise((resolve, reject) => {
-        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Unable to create image")), "image/png");
-      });
-    }
-
-    document.getElementById("copyQrImage").addEventListener("click", async () => {
-      const status = document.getElementById("copyStatus");
-      status.textContent = "กำลังสร้างรูปภาพ...";
-      try {
-        const blob = await createMeetingQrBlob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        status.textContent = "Copy รูปพร้อมรายละเอียดการประชุมแล้ว";
-      } catch (error) {
-        const blob = await createMeetingQrBlob();
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = qrPayload.meetingId + "-qr-meeting.png";
-        link.click();
-        URL.revokeObjectURL(link.href);
-        status.textContent = "Browser ไม่รองรับ copy image จึงดาวน์โหลดรูปแทน";
-      }
-    });
-  </script>
-</body>
-</html>`;
-    const pageUrl = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    window.open(pageUrl, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => URL.revokeObjectURL(pageUrl), 60_000);
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-4">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 font-semibold text-cyan-100">
-          <QrCode className="h-5 w-5 text-cyan-300" />
-          QR Code สำหรับลงทะเบียน
-        </div>
-        <div className="flex gap-2">
-          <button
-            aria-label="Open QR codes in new tab"
-            className={iconButtonTone("edit")}
-            disabled={Object.keys(images).length < items.length}
-            onClick={openQrTab}
-            title="เปิด QR code ใน New tab"
-            type="button"
-          >
-            <ExternalLink className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {items.map((item) => (
-          <QrCard item={item} key={item.url} image={images[item.url]} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function QrCard({ image, item }: { image?: string; item: QrItem }) {
-  return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
-      <div className="mx-auto mb-4 grid h-24 w-full max-w-48 place-items-center overflow-hidden rounded-xl border border-slate-700 bg-gradient-to-br from-cyan-950/80 to-slate-950 p-2">
-        {item.groupImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt={`${item.title} image`} className="h-20 w-full rounded-lg object-contain" src={item.groupImageUrl} />
-        ) : (
-          <div className="grid h-full w-full place-items-center text-center text-sm font-semibold text-cyan-100">
-            {item.label}
-          </div>
-        )}
-      </div>
-      <div className="mb-3 flex items-start justify-center gap-2 text-center font-semibold text-cyan-100">
-        <QrCode className="mt-1 h-5 w-5 shrink-0 text-cyan-300" />
-        <div className="leading-tight">
-          <div>{item.label}</div>
-          {item.groupName && <div className="mt-1 text-cyan-50">({item.groupName})</div>}
-        </div>
-      </div>
-      {image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img alt={item.title} className="mx-auto rounded-lg bg-white p-2" src={image} />
-      ) : (
-        <div className="grid h-56 place-items-center text-slate-400">Generating QR...</div>
-      )}
-      <a
-        className="mt-3 block break-all rounded-lg bg-slate-950 p-3 text-xs text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 transition hover:text-cyan-200 hover:decoration-cyan-300"
-        href={item.url}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        {item.url}
-      </a>
-    </div>
-  );
-}
-
 function LoginPage({
   error,
   onLogin,
@@ -739,11 +274,12 @@ export function SignMeetingApp() {
   const [form, setForm] = useState<MeetingForm>(emptyForm);
   const [config, setConfig] = useState<ConfigValues>({});
   const [people, setPeople] = useState<InternalPerson[]>([]);
+  const [participantGroups, setParticipantGroups] = useState<ParticipantGroup[]>([]);
   const [personForm, setPersonForm] = useState(emptyPerson);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingPersonId, setEditingPersonId] = useState<number | null>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
-  const [adminModal, setAdminModal] = useState<"settings" | "people" | null>(null);
+  const [adminModal, setAdminModal] = useState<"settings" | "people" | "participants" | null>(null);
   const [groupImageFiles, setGroupImageFiles] = useState<Partial<Record<GroupImageChannel, File>>>({});
   const [meetingChangeLogs, setMeetingChangeLogs] = useState<MeetingChangeLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -907,12 +443,16 @@ export function SignMeetingApp() {
   }
 
   async function loadSettings() {
-    const [configResponse, peopleResponse] = await Promise.all([
+    const [configResponse, peopleResponse, participantGroupsResponse] = await Promise.all([
       fetch(appPath("/api/config")),
       fetch(appPath("/api/internal-people")),
+      fetch(appPath("/api/participant-groups")),
     ]);
     setConfig((await configResponse.json()) as ConfigValues);
     setPeople((await peopleResponse.json()) as InternalPerson[]);
+    if (participantGroupsResponse.ok) {
+      setParticipantGroups((await participantGroupsResponse.json()) as ParticipantGroup[]);
+    }
   }
 
   // Determine login state from the server session cookie (no more trusting a
@@ -954,6 +494,7 @@ export function SignMeetingApp() {
       meetingType: meeting.meetingType,
       internalMeetingName: meeting.internalMeetingName || "Smarterware",
       externalMeetingName: meeting.externalMeetingName || "",
+      externalParticipantGroupId: meeting.externalParticipantGroupId,
       externalGroupMode: meeting.externalMeetingName?.trim() ? "NAMED" : "OPEN",
       allowLateRegister: false,
     });
@@ -974,6 +515,7 @@ export function SignMeetingApp() {
       meetingType: meeting.meetingType,
       internalMeetingName: meeting.internalMeetingName || "Smarterware",
       externalMeetingName: meeting.externalMeetingName || "",
+      externalParticipantGroupId: meeting.externalParticipantGroupId,
       externalGroupMode: meeting.externalMeetingName?.trim() ? "NAMED" : "OPEN",
       allowLateRegister: meeting.allowLateRegister,
     });
@@ -1018,12 +560,29 @@ export function SignMeetingApp() {
   }
 
   async function saveMeeting() {
+    const editingMeeting = editingId
+      ? meetings.find((meeting) => meeting.meetingId === editingId)
+      : undefined;
     if (!form.meetingProjectName || !form.meetingName || !form.meetingDate || !form.startTime || !form.endTime || !form.meetingLocation || !form.meetingType || !form.internalMeetingName) {
       setAlert("กรุณากรอกข้อมูลการประชุมให้ครบทุก Field");
       return;
     }
     if (form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED" && !form.externalMeetingName.trim()) {
-      setAlert("กรุณากรอกชื่อกลุ่มผู้ร่วมประชุม หรือเลือกไม่ระบุชื่อกลุ่มผู้ร่วมประชุม");
+      setAlert("กรุณาเลือกชื่อกลุ่มผู้ร่วมประชุม หรือเลือกไม่ระบุชื่อกลุ่มผู้ร่วมประชุม");
+      return;
+    }
+    const isUnchangedLegacyNamedGroup =
+      Boolean(editingMeeting) &&
+      editingMeeting?.externalParticipantGroupId == null &&
+      Boolean(editingMeeting?.externalMeetingName?.trim()) &&
+      editingMeeting?.externalMeetingName?.trim() === form.externalMeetingName.trim();
+    if (
+      form.meetingType === "EXTERNAL" &&
+      form.externalGroupMode === "NAMED" &&
+      !form.externalParticipantGroupId &&
+      !isUnchangedLegacyNamedGroup
+    ) {
+      setAlert("กรุณาเลือกชื่อกลุ่มผู้ร่วมประชุมจาก Master Data");
       return;
     }
     if (!isEndTimeAfterStart(form)) {
@@ -1035,7 +594,6 @@ export function SignMeetingApp() {
       return;
     }
 
-    const editingMeeting = editingId ? meetings.find((meeting) => meeting.meetingId === editingId) : undefined;
     const normalizedExternalName =
       form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED"
         ? form.externalMeetingName.trim()
@@ -1075,6 +633,10 @@ export function SignMeetingApp() {
             body: JSON.stringify({
               ...form,
               externalMeetingName: normalizedExternalName,
+              externalParticipantGroupId:
+                form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED"
+                  ? form.externalParticipantGroupId
+                  : null,
               expectedUpdatedAt: editingMeeting?.updatedAt,
             }),
           });
@@ -1148,6 +710,29 @@ export function SignMeetingApp() {
     }
   }
 
+  async function uploadMeetingDocuments(meetingId: string, files: FileList | null) {
+    if (!files?.length) return;
+    const formData = new FormData();
+    Array.from(files).forEach((file) => formData.append("files", file));
+    setLoading(true);
+    try {
+      const response = await fetch(appPath(`/api/meetings/${meetingId}/documents`), {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const result = (await response.json().catch(() => ({}))) as { message?: string };
+        throw new Error(result.message ?? "Upload เอกสารไม่สำเร็จ");
+      }
+      await loadMeetings();
+      setAlert("แนบเอกสารประกอบการประชุมเรียบร้อยแล้ว");
+    } catch (error) {
+      setAlert(error instanceof Error ? error.message : "Upload เอกสารไม่สำเร็จ");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function uploadMeetingGroupImage(meetingId: string, channel: GroupImageChannel, file: File) {
     const formData = new FormData();
     formData.append("file", file);
@@ -1196,6 +781,32 @@ export function SignMeetingApp() {
           await fetch(appPath(`/api/meetings/${meetingId}/photos/${photo.id}`), { method: "DELETE" });
           await loadMeetings();
           setAlert("ลบรูปเรียบร้อยแล้ว");
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  }
+
+  function deleteMeetingDocument(meetingId: string, document: MeetingDocument) {
+    setConfirm({
+      message: `ยืนยันการลบเอกสาร ${document.filename} ออกจากการประชุม ${meetingId}?`,
+      action: async () => {
+        setConfirm(null);
+        setLoading(true);
+        try {
+          const response = await fetch(
+            appPath(`/api/meetings/${meetingId}/documents/${document.id}`),
+            { method: "DELETE" },
+          );
+          if (!response.ok) {
+            const result = (await response.json().catch(() => ({}))) as { message?: string };
+            throw new Error(result.message ?? "ลบเอกสารไม่สำเร็จ");
+          }
+          await loadMeetings();
+          setAlert("ลบเอกสารประกอบการประชุมเรียบร้อยแล้ว");
+        } catch (error) {
+          setAlert(error instanceof Error ? error.message : "ลบเอกสารไม่สำเร็จ");
         } finally {
           setLoading(false);
         }
@@ -1479,12 +1090,16 @@ export function SignMeetingApp() {
             onCancel={closeMeetingModal}
             onChange={setForm}
             onDeleteGroupImage={(channel) => deleteMeetingGroupImage(meetings.find((meeting) => meeting.meetingId === editingId), channel)}
+            onDeleteDocument={deleteMeetingDocument}
             onDeletePhoto={deleteMeetingPhoto}
             onGroupImageFileChange={setGroupImageFile}
             onSave={saveMeeting}
+            onUploadDocuments={uploadMeetingDocuments}
             onUploadPhotos={uploadMeetingPhotos}
+            documents={meetings.find((meeting) => meeting.meetingId === editingId)?.documents ?? []}
             groupImageFiles={groupImageFiles}
             meeting={meetings.find((meeting) => meeting.meetingId === editingId)}
+            participantGroups={participantGroups}
             photos={meetings.find((meeting) => meeting.meetingId === editingId)?.photos ?? []}
             registrationClosed={isRegistrationWindowClosed(form, config.close_time)}
           />
@@ -1492,106 +1107,53 @@ export function SignMeetingApp() {
       )}
       {adminModal === "settings" && (
         <Modal title="Settings" onClose={() => setAdminModal(null)}>
-          <div className="grid gap-4">
-            <p className="text-sm text-slate-400">กำหนดค่า Config ของระบบ</p>
-            <Field label="Meeting Running">
-              <input
-                className={inputBase}
-                inputMode="numeric"
-                value={config.meeting_running ?? ""}
-                onChange={(event) => setConfig({ ...config, meeting_running: event.target.value })}
-              />
-            </Field>
-            <Field label="Register Time Limit (minutes)">
-              <input
-                className={inputBase}
-                inputMode="numeric"
-                value={config.close_time ?? ""}
-                onChange={(event) => setConfig({ ...config, close_time: event.target.value })}
-              />
-            </Field>
-            <div className="flex justify-end gap-3 border-t border-slate-700 pt-4">
-              <button className={buttonTone("muted")} onClick={() => setAdminModal(null)} type="button">
-                <X className="h-4 w-4" /> ปิด
-              </button>
-              <button className={buttonTone("save")} onClick={saveConfig} type="button">
-                <Save className="h-4 w-4" /> บันทึก Settings
-              </button>
-            </div>
-          </div>
+          <SettingsAdminContent
+            config={config}
+            onChange={setConfig}
+            onClose={() => setAdminModal(null)}
+            onSave={saveConfig}
+          />
         </Modal>
       )}
       {adminModal === "people" && (
         <Modal title="ผู้ปฏิบัติงาน" widthClass="max-w-7xl" onClose={() => setAdminModal(null)}>
-          <div className="grid gap-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <p className="text-sm text-slate-400">ใช้เป็น dropdown สำหรับ QR ผู้ปฏิบัติงาน</p>
-              <button
-                className={buttonTone("muted")}
-                onClick={() => {
-                  setEditingPersonId(null);
-                  setPersonForm(emptyPerson);
-                }}
-                type="button"
-              >
-                <RefreshCw className="h-4 w-4" /> ล้างฟอร์ม
-              </button>
-            </div>
-
-            <div className="grid gap-3 rounded-xl border border-slate-700 bg-slate-950/40 p-4 md:grid-cols-2 xl:grid-cols-5">
-              <input className={inputBase} placeholder="ชื่อ" value={personForm.fname} onChange={(event) => setPersonForm({ ...personForm, fname: event.target.value })} />
-              <input className={inputBase} placeholder="นามสกุล" value={personForm.lname} onChange={(event) => setPersonForm({ ...personForm, lname: event.target.value })} />
-              <input className={inputBase} placeholder="ตำแหน่ง" value={personForm.position} onChange={(event) => setPersonForm({ ...personForm, position: event.target.value })} />
-              <input className={inputBase} placeholder="E-mail" type="email" value={personForm.email} onChange={(event) => setPersonForm({ ...personForm, email: event.target.value })} />
-              <input className={inputBase} inputMode="tel" placeholder="โทรศัพท์" type="tel" value={personForm.phone} onChange={(event) => setPersonForm({ ...personForm, phone: event.target.value })} />
-              <button className={`${buttonTone("save")} md:col-span-2 xl:col-span-5`} onClick={savePerson} type="button">
-                <Save className="h-4 w-4" /> {editingPersonId ? "บันทึกการแก้ไขผู้ปฏิบัติงาน" : "เพิ่มผู้ปฏิบัติงาน"}
-              </button>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-700">
-              <table className="w-full min-w-[1080px] text-left text-sm">
-                <thead className="bg-slate-950 text-slate-300">
-                  <tr>
-                    <th className="px-4 py-3">ID</th>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Position</th>
-                    <th className="px-4 py-3">E-mail</th>
-                    <th className="px-4 py-3">โทรศัพท์</th>
-                    <th className="px-4 py-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {people.map((person) => (
-                    <tr key={person.intPid} className="border-t border-slate-800">
-                      <td className="px-4 py-3 font-semibold text-amber-300">{person.intPid}</td>
-                      <td className="px-4 py-3">{person.fname} {person.lname}</td>
-                      <td className="px-4 py-3">{person.position}</td>
-                      <td className="px-4 py-3">{person.email || "-"}</td>
-                      <td className="px-4 py-3">{person.phone || "-"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button aria-label={`แก้ไข ${person.fname}`} className={iconButtonTone("edit")} onClick={() => startEditPerson(person)} title="แก้ไข" type="button">
-                            <Edit3 className="h-5 w-5" />
-                          </button>
-                          <button aria-label={`ลบ ${person.fname}`} className={iconButtonTone("delete")} onClick={() => deletePerson(person)} title="ลบ" type="button">
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {people.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-slate-400" colSpan={6}>
-                        ยังไม่มีข้อมูลผู้ปฏิบัติงาน
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <InternalPeopleAdminContent
+            editingPersonId={editingPersonId}
+            form={personForm}
+            onChange={setPersonForm}
+            onDelete={deletePerson}
+            onEdit={startEditPerson}
+            onReset={() => {
+              setEditingPersonId(null);
+              setPersonForm(emptyPerson);
+            }}
+            onSave={savePerson}
+            people={people}
+          />
+        </Modal>
+      )}
+      {adminModal === "participants" && (
+        <Modal
+          title="กลุ่มผู้ร่วมประชุม"
+          widthClass="max-w-7xl"
+          onClose={() => {
+            setAdminModal(null);
+            void loadSettings();
+          }}
+        >
+          <ParticipantDirectory
+            onConfirm={(message, action) => {
+              setConfirm({
+                message,
+                action: () => {
+                  setConfirm(null);
+                  void action();
+                },
+              });
+            }}
+            onLoading={setLoading}
+            onNotify={setAlert}
+          />
         </Modal>
       )}
 
@@ -1631,6 +1193,15 @@ export function SignMeetingApp() {
               <Users className="h-5 w-5" />
             </button>
             <button
+              aria-label="กลุ่มผู้ร่วมประชุม"
+              className={iconButtonTone("edit")}
+              onClick={() => setAdminModal("participants")}
+              title="กำหนดกลุ่มผู้ร่วมประชุมและรายชื่อ"
+              type="button"
+            >
+              <UserPlus className="h-5 w-5" />
+            </button>
+            <button
               aria-label="Logout"
               className={iconButtonTone("muted")}
               onClick={async () => {
@@ -1650,117 +1221,27 @@ export function SignMeetingApp() {
           <SummaryCard icon={<Users />} label="Attendance" value={totalAttendance} tone="emerald" />
         </section>
 
-        <section>
-          <div id="meetingsTable" className="rounded-2xl border border-slate-700 bg-slate-900/75 p-5 shadow-xl">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h2 className="text-xl font-bold">Meetings</h2>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <label className="relative min-w-72">
-                  <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className={`${inputBase} pl-10`}
-                    placeholder="Live Search..."
-                    value={meetingSearch}
-                    onChange={(event) => {
-                      setMeetingSearch(event.target.value);
-                      setMeetingPage(1);
-                    }}
-                  />
-                </label>
-                <button className={buttonTone("muted")} onClick={loadMeetings} type="button">
-                  <RefreshCw className="h-4 w-4" /> Refresh
-                </button>
-                <button id="createMeetingButton" className={buttonTone("create")} onClick={startCreate} type="button">
-                  <Plus className="h-5 w-5" /> สร้างการประชุมใหม่
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-700">
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead className="bg-slate-950 text-slate-300">
-                  <tr>
-                    <th className="px-4 py-3">Actions</th>
-                    <SortableTh label="Meeting ID" onClick={() => toggleMeetingSort("meetingId")} />
-                    <SortableTh label="Project" onClick={() => toggleMeetingSort("meetingProjectName")} />
-                    <SortableTh label="Meeting" onClick={() => toggleMeetingSort("meetingName")} />
-                    <SortableTh label="Date" onClick={() => toggleMeetingSort("meetingDate")} />
-                    <SortableTh label="Count" onClick={() => toggleMeetingSort("attendances")} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedMeetings.map((meeting) => (
-                    <tr
-                      key={meeting.meetingId}
-                      className={`border-t border-slate-800 hover:bg-slate-800/60 ${
-                        selected?.meetingId === meeting.meetingId ? "bg-cyan-500/10" : ""
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex flex-nowrap items-center gap-1">
-                          <button
-                            aria-label={`แสดง QR และรายชื่อของ ${meeting.meetingId}`}
-                            className={iconButtonTone("repeat", "sm")}
-                            onClick={() => setSelectedId(meeting.meetingId)}
-                            title="แสดง QR และ Attendance"
-                            type="button"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            aria-label={`เรียกซ้ำ ${meeting.meetingId}`}
-                            className={iconButtonTone("preview", "sm")}
-                            onClick={() => repeatMeeting(meeting)}
-                            title="ประชุมอีกครั้ง"
-                            type="button"
-                          >
-                            <Repeat2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            aria-label={`แก้ไข ${meeting.meetingId}`}
-                            className={iconButtonTone("edit", "sm")}
-                            onClick={() => startEdit(meeting)}
-                            title="แก้ไข"
-                            type="button"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                          <button
-                            aria-label={`ลบ ${meeting.meetingId}`}
-                            className={iconButtonTone("delete", "sm")}
-                            onClick={() => deleteMeeting(meeting)}
-                            title="ลบ"
-                            type="button"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-cyan-200"><Highlight query={meetingSearch} text={meeting.meetingId} /></td>
-                      <td className="px-4 py-3"><Highlight query={meetingSearch} text={meeting.meetingProjectName} /></td>
-                      <td className="px-4 py-3"><Highlight query={meetingSearch} text={meeting.meetingName} /></td>
-                      <td className="px-4 py-3">{formatThaiDate(meeting.meetingDate)} {formatTimeRange(meeting.startTime, meeting.endTime)}</td>
-                      <td className="px-4 py-3">{meeting.attendances.length}</td>
-                    </tr>
-                  ))}
-                  {visibleMeetings.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-8 text-center text-slate-400" colSpan={6}>
-                        ยังไม่มีรายการประชุม
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              <PaginationControls
-                page={meetingPage}
-                pageSize={meetingPageSize}
-                total={visibleMeetings.length}
-                onPageChange={setMeetingPage}
-                onPageSizeChange={setMeetingPageSize}
-              />
-            </div>
-          </div>
-        </section>
+        <MeetingTable
+          meetings={pagedMeetings}
+          onCreate={startCreate}
+          onDelete={deleteMeeting}
+          onEdit={startEdit}
+          onPageChange={setMeetingPage}
+          onPageSizeChange={setMeetingPageSize}
+          onRefresh={loadMeetings}
+          onRepeat={repeatMeeting}
+          onSearchChange={(value) => {
+            setMeetingSearch(value);
+            setMeetingPage(1);
+          }}
+          onSelect={setSelectedId}
+          onSort={toggleMeetingSort}
+          page={meetingPage}
+          pageSize={meetingPageSize}
+          search={meetingSearch}
+          selectedMeetingId={selected?.meetingId}
+          total={visibleMeetings.length}
+        />
 
         {selected && (
           <AccordionSection
@@ -1785,55 +1266,16 @@ export function SignMeetingApp() {
               </div>
             </div>
 
-            <QrPanel items={selectedQrItems} meeting={selected} />
+            <MeetingQrPanel items={selectedQrItems} meeting={selected} />
 
-            <div className="mt-5 rounded-xl border border-slate-700 bg-slate-950/40 p-4">
-              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-xl font-bold">Attendance</h2>
-                  <p className="text-sm text-slate-400">รายงานตาม Meeting ID: {selected.meetingId}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="min-w-64">
-                    <span className="sr-only">เลือกการประชุม</span>
-                    <select
-                      className={inputBase}
-                      value={selected.meetingId}
-                      onChange={(event) => setSelectedId(event.target.value)}
-                      title="เลือกการประชุมเพื่อแสดง Attendance"
-                    >
-                      {meetings.map((meeting) => (
-                        <option key={meeting.meetingId} value={meeting.meetingId}>
-                          {meeting.meetingId} - {meeting.meetingName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button aria-label="Refresh Attendance" className={iconButtonTone("muted")} onClick={loadMeetings} title="Refresh ข้อมูล Attendance" type="button">
-                    <RefreshCw className="h-5 w-5" />
-                  </button>
-                  {selected.attendances.length > 0 && (
-                    <>
-                      <button aria-label="Export Excel" className={iconButtonTone("excel")} onClick={() => downloadExport(selected, "excel")} title="Export Excel" type="button">
-                        <FileSpreadsheet className="h-5 w-5" />
-                      </button>
-                      <button aria-label="Export PDF แนวนอน" className={iconButtonTone("pdf")} onClick={() => downloadExport(selected, "pdf")} title="Export PDF แนวนอน" type="button">
-                        <Download className="h-5 w-5" />
-                      </button>
-                      <button aria-label="Export PDF แนวตั้ง" className={iconButtonTone("pdf")} onClick={() => downloadExport(selected, "pdfPortrait")} title="Export PDF แนวตั้ง" type="button">
-                        <FileDown className="h-5 w-5" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <AttendanceTable
-                externalGroupName={selected.externalMeetingName || ""}
-                internalGroupName={selected.internalMeetingName}
-                onDelete={deleteAttendance}
-                rows={selected.attendances}
-              />
-            </div>
+            <MeetingAttendancePanel
+              meeting={selected}
+              meetings={meetings}
+              onDelete={deleteAttendance}
+              onExport={downloadExport}
+              onRefresh={loadMeetings}
+              onSelect={setSelectedId}
+            />
           </AccordionSection>
         )}
 

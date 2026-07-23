@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { MeetingType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, requireAuth } from "@/lib/auth";
-import { deleteMeetingPhotoDir } from "@/lib/photo-storage";
+import { deleteMeetingFiles } from "@/lib/meeting-file-storage";
 import { normalizeMeetingInput } from "@/lib/meeting-input";
 import { buildMeetingFieldChanges, validateMeetingEditPolicy } from "@/lib/meeting-edit-policy";
 
@@ -24,7 +24,11 @@ export async function GET(_request: Request, { params }: Params) {
   const { meetingId } = await params;
   const meeting = await prisma.meeting.findUnique({
     where: { meetingId },
-    include: { attendances: { orderBy: { personNo: "asc" } }, photos: { orderBy: { createdAt: "desc" } } },
+    include: {
+      attendances: { orderBy: { personNo: "asc" } },
+      photos: { orderBy: { createdAt: "desc" } },
+      documents: { orderBy: { createdAt: "desc" } },
+    },
   });
   if (!meeting) {
     return NextResponse.json({ message: "Meeting not found" }, { status: 404 });
@@ -62,8 +66,35 @@ export async function PUT(request: Request, { params }: Params) {
       if (requestedMeetingType !== MeetingType.INTERNAL && requestedMeetingType !== MeetingType.EXTERNAL) {
         throw new MeetingUpdateError("Meeting Type is invalid.", 400);
       }
-      const normalized = normalizeMeetingInput({ ...body, meetingType: existing.meetingType });
+      const normalized = normalizeMeetingInput({
+        ...body,
+        meetingType: existing.meetingType,
+        externalParticipantGroupId:
+          Object.prototype.hasOwnProperty.call(body, "externalParticipantGroupId")
+            ? body.externalParticipantGroupId
+            : existing.externalParticipantGroupId,
+      });
       if ("error" in normalized) throw new MeetingUpdateError(normalized.error, 400);
+      if (existing.meetingType === MeetingType.EXTERNAL && normalized.externalParticipantGroupId) {
+        const participantGroup = await tx.participantGroup.findFirst({
+          where: { groupId: normalized.externalParticipantGroupId, isActive: true },
+          select: { name: true },
+        });
+        if (!participantGroup) {
+          throw new MeetingUpdateError("กรุณาเลือกกลุ่มผู้ร่วมประชุมที่ยังใช้งานอยู่", 400);
+        }
+        normalized.externalMeetingName =
+          normalized.externalParticipantGroupId === existing.externalParticipantGroupId &&
+          existing.externalMeetingName
+            ? existing.externalMeetingName
+            : participantGroup.name;
+      } else if (
+        existing.meetingType === MeetingType.EXTERNAL &&
+        normalized.externalMeetingName &&
+        normalized.externalMeetingName !== existing.externalMeetingName
+      ) {
+        throw new MeetingUpdateError("กรุณาเลือกชื่อกลุ่มผู้ร่วมประชุมจาก Master Data", 400);
+      }
 
       const allowLateRegister = body.allowLateRegister === true;
       const changes = buildMeetingFieldChanges(existing, normalized, allowLateRegister);
@@ -89,6 +120,10 @@ export async function PUT(request: Request, { params }: Params) {
               orderBy: { createdAt: "desc" },
               select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
             },
+            documents: {
+              orderBy: { createdAt: "desc" },
+              select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
+            },
           },
         });
       }
@@ -106,11 +141,19 @@ export async function PUT(request: Request, { params }: Params) {
           meetingLocation: normalized.meetingLocation,
           internalMeetingName: normalized.internalMeetingName,
           externalMeetingName: existing.meetingType === MeetingType.EXTERNAL ? normalized.externalMeetingName || null : null,
+          externalParticipantGroupId:
+            existing.meetingType === MeetingType.EXTERNAL
+              ? normalized.externalParticipantGroupId
+              : null,
           allowLateRegister,
         },
         include: {
           attendances: { orderBy: { personNo: "asc" } },
           photos: {
+            orderBy: { createdAt: "desc" },
+            select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
+          },
+          documents: {
             orderBy: { createdAt: "desc" },
             select: { id: true, meetingId: true, filename: true, mimeType: true, size: true, createdAt: true },
           },
@@ -145,6 +188,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   if (denied) return denied;
   const { meetingId } = await params;
   await prisma.meeting.delete({ where: { meetingId } });
-  await deleteMeetingPhotoDir(meetingId);
+  await deleteMeetingFiles(meetingId);
   return NextResponse.json({ ok: true });
 }
