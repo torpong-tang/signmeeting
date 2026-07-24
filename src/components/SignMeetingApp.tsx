@@ -21,7 +21,6 @@ import "driver.js/dist/driver.css";
 import { appOriginPath, appPath } from "@/lib/paths";
 import type {
   Attendance,
-  ConfigValues,
   GroupImageChannel,
   InternalPerson,
   Meeting,
@@ -29,7 +28,7 @@ import type {
   MeetingDocument,
   MeetingForm,
   MeetingPhoto,
-  ParticipantGroup,
+  QrItem,
 } from "@/components/signmeeting/types";
 import { MeetingAttendancePanel } from "@/components/signmeeting/MeetingAttendancePanel";
 import {
@@ -37,15 +36,31 @@ import {
   SettingsAdminContent,
 } from "@/components/signmeeting/AdminModalContents";
 import { MeetingFormFields } from "@/components/signmeeting/MeetingFormFields";
-import {
-  MeetingQrPanel,
-  type QrItem,
-} from "@/components/signmeeting/MeetingQrPanel";
+import { MeetingQrPanel } from "@/components/signmeeting/MeetingQrPanel";
 import {
   MeetingTable,
   type MeetingSortKey,
 } from "@/components/signmeeting/MeetingTable";
 import { ParticipantDirectory } from "@/components/signmeeting/ParticipantDirectory";
+import { useSignMeetingCollections } from "@/components/signmeeting/useSignMeetingCollections";
+import { startSignMeetingAdminTour } from "@/components/signmeeting/admin-tour";
+import {
+  deleteAttendanceRecord,
+  deleteInternalPersonRecord,
+  deleteMeetingDocumentRecord,
+  deleteMeetingGroupImageRecord,
+  deleteMeetingPhotoRecord,
+  deleteMeetingRecord,
+  getAdminSession,
+  getMeetingChanges,
+  loginAdmin,
+  logoutAdmin,
+  saveConfigRecord,
+  saveInternalPersonRecord,
+  saveMeetingRecord,
+  uploadMeetingFiles,
+  uploadMeetingGroupImageRecord,
+} from "@/components/signmeeting/signmeeting-api";
 import {
   buttonTone,
   compareValues,
@@ -269,12 +284,8 @@ export function SignMeetingApp() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [form, setForm] = useState<MeetingForm>(emptyForm);
-  const [config, setConfig] = useState<ConfigValues>({});
-  const [people, setPeople] = useState<InternalPerson[]>([]);
-  const [participantGroups, setParticipantGroups] = useState<ParticipantGroup[]>([]);
   const [personForm, setPersonForm] = useState(emptyPerson);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingPersonId, setEditingPersonId] = useState<number | null>(null);
@@ -283,6 +294,19 @@ export function SignMeetingApp() {
   const [groupImageFiles, setGroupImageFiles] = useState<Partial<Record<GroupImageChannel, File>>>({});
   const [meetingChangeLogs, setMeetingChangeLogs] = useState<MeetingChangeLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const {
+    config,
+    loadMeetings,
+    loadSettings,
+    meetings,
+    participantGroups,
+    people,
+    setConfig,
+  } = useSignMeetingCollections({
+    selectedId,
+    setSelectedId,
+    setLoading,
+  });
   const [alert, setAlert] = useState("");
   const [confirm, setConfirm] = useState<{ message: string; action: () => void } | null>(null);
   const [openSections, setOpenSections] = useState({
@@ -305,162 +329,16 @@ export function SignMeetingApp() {
     setOrigin(window.location.origin);
   }, []);
 
-  async function startAdminTour() {
-    const { driver } = await import("driver.js");
-    const tour = driver({
-      showProgress: true,
-      progressText: "ขั้นที่ {{current}} / {{total}}",
-      nextBtnText: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
-      prevBtnText: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`,
-      doneBtnText: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
-      popoverClass: "sm-tour",
-      steps: [
-        {
-          popover: {
-            popoverClass: "sm-tour sm-tour-welcome",
-            title: "👋 ยินดีต้อนรับสู่ SignMeeting",
-            description: `
-              <p class="sm-lead">ระบบลงทะเบียนเข้าร่วมประชุมด้วย QR Code ครบวงจร</p>
-              <p>ทัวร์สั้น ๆ นี้จะพาคุณรู้จักทุกส่วนของหน้าผู้ดูแลระบบใน <b>7 ขั้นตอน</b> ใช้เวลาไม่ถึง 1 นาที</p>
-              <ul class="sm-list">
-                <li>🗂️ สร้างและจัดการการประชุม</li>
-                <li>📱 สร้าง QR ให้ผู้เข้าร่วมสแกนลงทะเบียน</li>
-                <li>📊 ติดตามและส่งออกรายชื่อเป็น Excel / PDF</li>
-              </ul>
-              <p class="sm-tip">💡 กดปุ่ม <b>Guided Tour</b> เมื่อไรก็ได้เพื่อดูทัวร์นี้อีกครั้ง</p>
-            `,
-          },
-        },
-        {
-          element: "#summaryCards",
-          popover: {
-            popoverClass: "sm-tour sm-tour-cyan",
-            title: "📊 ภาพรวมแบบเร็ว",
-            description: `
-              <p>การ์ดสรุปบอกสถานะระบบในพริบตา</p>
-              <ul class="sm-list">
-                <li><span class="sm-chip sm-chip-cyan">Meetings</span> จำนวนการประชุมทั้งหมดในระบบ</li>
-                <li><span class="sm-chip sm-chip-emerald">Attendance</span> ยอดผู้เข้าร่วมรวมทุกการประชุม</li>
-              </ul>
-              <p class="sm-tip">ตัวเลขอัปเดตอัตโนมัติทุกครั้งที่มีคนลงทะเบียนใหม่</p>
-            `,
-          },
-        },
-        {
-          element: "#createMeetingButton",
-          popover: {
-            popoverClass: "sm-tour sm-tour-amber",
-            title: "➕ สร้างการประชุมใหม่",
-            description: `
-              <p>เริ่มต้นที่นี่ ระบบจะออก <b>Meeting ID</b> และสร้าง <b>QR Code</b> ให้อัตโนมัติ</p>
-              <ul class="sm-list">
-                <li>📝 กรอกชื่อโครงการ ชื่อการประชุม วัน-เวลา และสถานที่</li>
-                <li>🔀 เลือกประเภท <b>ผู้ปฏิบัติงาน</b> หรือ <b>ผู้ร่วมประชุม</b></li>
-                <li>⏱️ เปิด/ปิดการลงทะเบียนล่าช้าได้</li>
-              </ul>
-            `,
-          },
-        },
-        {
-          element: "#meetingsTable",
-          popover: {
-            popoverClass: "sm-tour sm-tour-violet",
-            title: "🗂️ ตารางการประชุม",
-            description: `
-              <p>ศูนย์รวมการจัดการการประชุมทั้งหมด</p>
-              <ul class="sm-list">
-                <li>🔎 <b>ค้นหาสด</b> และคลิกหัวคอลัมน์เพื่อ <b>จัดเรียง</b></li>
-                <li>👆 คลิกแถวเพื่อ <b>เลือก</b> ดู QR และรายชื่อด้านล่าง</li>
-                <li>✏️ <b>แก้ไข</b> · 🗑️ <b>ลบ</b> · 🔁 <b>เรียกซ้ำ</b> การประชุมเดิม</li>
-              </ul>
-            `,
-          },
-        },
-        {
-          element: "#qrAttendanceSection",
-          popover: {
-            popoverClass: "sm-tour sm-tour-emerald",
-            title: "📱 QR Code & รายชื่อผู้เข้าร่วม",
-            description: `
-              <p>หัวใจของระบบ — ฉายให้ผู้เข้าร่วมสแกนลงทะเบียนได้ทันที</p>
-              <ul class="sm-list">
-                <li>🖼️ แสดง QR แยกช่องทาง <b>ผู้ปฏิบัติงาน / ผู้ร่วมประชุม</b></li>
-                <li>🔄 ปุ่ม Refresh เพื่อดึงรายชื่อล่าสุด</li>
-                <li>📥 ส่งออกเป็น <b>Excel</b> หรือ <b>PDF</b> (ฟอนต์ไทยราชการ)</li>
-              </ul>
-            `,
-          },
-        },
-        {
-          element: "#settingsSection",
-          popover: {
-            popoverClass: "sm-tour sm-tour-rose",
-            title: "⚙️ ตั้งค่าระบบ",
-            description: `
-              <p>ปรับพฤติกรรมการลงทะเบียนให้เหมาะกับงานของคุณ</p>
-              <ul class="sm-list">
-                <li>🔢 กำหนด <b>running number</b> เริ่มต้นของ Meeting ID</li>
-                <li>⏰ ตั้ง <b>เวลาปิดรับลงทะเบียน</b> หลังเริ่มประชุม</li>
-              </ul>
-            `,
-          },
-        },
-        {
-          element: "#personnelSection",
-          popover: {
-            popoverClass: "sm-tour sm-tour-indigo",
-            title: "👥 ผู้ปฏิบัติงาน",
-            description: `
-              <p>จัดการทะเบียนรายชื่อผู้ปฏิบัติงานไว้ล่วงหน้า</p>
-              <ul class="sm-list">
-                <li>➕ เพิ่ม/แก้ไขชื่อ หน่วยงาน ตำแหน่ง E-mail และโทรศัพท์</li>
-                <li>⚡ ผู้เข้าร่วมเลือกชื่อจาก <b>dropdown</b> ได้เลย ไม่ต้องพิมพ์เอง</li>
-              </ul>
-              <p class="sm-tip">🎯 จบแล้ว! พร้อมเริ่มสร้างการประชุมแรกของคุณหรือยัง?</p>
-            `,
-          },
-        },
-      ],
-    });
-    tour.drive();
-  }
-
   const selected = useMemo(
     () => meetings.find((meeting) => meeting.meetingId === selectedId) ?? meetings[0],
     [meetings, selectedId],
   );
 
-  async function loadMeetings() {
-    setLoading(true);
-    try {
-      const response = await fetch(appPath("/api/meetings"));
-      const data = (await response.json()) as Meeting[];
-      setMeetings(data);
-      if (!selectedId && data[0]) setSelectedId(data[0].meetingId);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadSettings() {
-    const [configResponse, peopleResponse, participantGroupsResponse] = await Promise.all([
-      fetch(appPath("/api/config")),
-      fetch(appPath("/api/internal-people")),
-      fetch(appPath("/api/participant-groups")),
-    ]);
-    setConfig((await configResponse.json()) as ConfigValues);
-    setPeople((await peopleResponse.json()) as InternalPerson[]);
-    if (participantGroupsResponse.ok) {
-      setParticipantGroups((await participantGroupsResponse.json()) as ParticipantGroup[]);
-    }
-  }
-
   // Determine login state from the server session cookie (no more trusting a
   // client-side localStorage flag).
   useEffect(() => {
-    fetch(appPath("/api/auth/session"))
-      .then((response) => response.json())
-      .then((data: { authenticated?: boolean }) => setIsAdmin(Boolean(data.authenticated)))
+    getAdminSession()
+      .then((data) => setIsAdmin(Boolean(data.authenticated)))
       .catch(() => setIsAdmin(false))
       .finally(() => setAuthChecked(true));
   }, []);
@@ -524,9 +402,7 @@ export function SignMeetingApp() {
     setMeetingModalOpen(true);
     setLoading(true);
     try {
-      const response = await fetch(appPath(`/api/meetings/${meeting.meetingId}/changes`));
-      if (!response.ok) throw new Error("โหลดประวัติการแก้ไขไม่สำเร็จ");
-      setMeetingChangeLogs((await response.json()) as MeetingChangeLog[]);
+      setMeetingChangeLogs(await getMeetingChanges(meeting.meetingId));
     } catch (error) {
       setAlert(error instanceof Error ? error.message : "โหลดประวัติการแก้ไขไม่สำเร็จ");
     } finally {
@@ -627,24 +503,16 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch(appPath(editingId ? `/api/meetings/${editingId}` : "/api/meetings"), {
-            method: editingId ? "PUT" : "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...form,
-              externalMeetingName: normalizedExternalName,
-              externalParticipantGroupId:
-                form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED"
-                  ? form.externalParticipantGroupId
-                  : null,
-              expectedUpdatedAt: editingMeeting?.updatedAt,
-            }),
+          const saved = await saveMeetingRecord({
+            editingId,
+            expectedUpdatedAt: editingMeeting?.updatedAt,
+            externalMeetingName: normalizedExternalName,
+            externalParticipantGroupId:
+              form.meetingType === "EXTERNAL" && form.externalGroupMode === "NAMED"
+                ? form.externalParticipantGroupId
+                : null,
+            form,
           });
-          if (!response.ok) {
-            const result = (await response.json().catch(() => ({}))) as { message?: string };
-            throw new Error(result.message ?? "บันทึกการประชุมไม่สำเร็จ");
-          }
-          const saved = (await response.json()) as Meeting;
           const uploadTasks: Array<{ label: string; channel: "internal" | "external"; file: File }> = [];
           if (groupImageFiles.internal) {
             uploadTasks.push({
@@ -689,18 +557,9 @@ export function SignMeetingApp() {
 
   async function uploadMeetingPhotos(meetingId: string, files: FileList | null) {
     if (!files?.length) return;
-    const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append("files", file));
     setLoading(true);
     try {
-      const response = await fetch(appPath(`/api/meetings/${meetingId}/photos`), {
-        method: "POST",
-        body: formData,
-      });
-      if (!response.ok) {
-        const result = (await response.json().catch(() => ({}))) as { message?: string };
-        throw new Error(result.message ?? "Upload รูปไม่สำเร็จ");
-      }
+      await uploadMeetingFiles(meetingId, "photos", files);
       await loadMeetings();
       setAlert("แนบรูปผู้เข้าร่วมประชุมเรียบร้อยแล้ว");
     } catch (error) {
@@ -712,18 +571,9 @@ export function SignMeetingApp() {
 
   async function uploadMeetingDocuments(meetingId: string, files: FileList | null) {
     if (!files?.length) return;
-    const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append("files", file));
     setLoading(true);
     try {
-      const response = await fetch(appPath(`/api/meetings/${meetingId}/documents`), {
-        method: "POST",
-        body: formData,
-      });
-      if (!response.ok) {
-        const result = (await response.json().catch(() => ({}))) as { message?: string };
-        throw new Error(result.message ?? "Upload เอกสารไม่สำเร็จ");
-      }
+      await uploadMeetingFiles(meetingId, "documents", files);
       await loadMeetings();
       setAlert("แนบเอกสารประกอบการประชุมเรียบร้อยแล้ว");
     } catch (error) {
@@ -734,16 +584,7 @@ export function SignMeetingApp() {
   }
 
   async function uploadMeetingGroupImage(meetingId: string, channel: GroupImageChannel, file: File) {
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await fetch(appPath(`/api/meetings/${meetingId}/group-images/${channel}`), {
-      method: "POST",
-      body: formData,
-    });
-    if (!response.ok) {
-      const result = (await response.json().catch(() => ({}))) as { message?: string };
-      throw new Error(result.message ?? "Upload รูปประจำกลุ่มไม่สำเร็จ");
-    }
+    await uploadMeetingGroupImageRecord(meetingId, channel, file);
   }
 
   function deleteMeetingGroupImage(meeting: Meeting | undefined, channel: GroupImageChannel) {
@@ -755,11 +596,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch(appPath(`/api/meetings/${meeting.meetingId}/group-images/${channel}`), { method: "DELETE" });
-          if (!response.ok) {
-            const result = (await response.json().catch(() => ({}))) as { message?: string };
-            throw new Error(result.message ?? "ลบรูปประจำกลุ่มไม่สำเร็จ");
-          }
+          await deleteMeetingGroupImageRecord(meeting.meetingId, channel);
           await loadMeetings();
           setAlert("ลบรูปประจำกลุ่มเรียบร้อยแล้ว");
         } catch (error) {
@@ -778,7 +615,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(appPath(`/api/meetings/${meetingId}/photos/${photo.id}`), { method: "DELETE" });
+          await deleteMeetingPhotoRecord(meetingId, photo.id);
           await loadMeetings();
           setAlert("ลบรูปเรียบร้อยแล้ว");
         } finally {
@@ -795,14 +632,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch(
-            appPath(`/api/meetings/${meetingId}/documents/${document.id}`),
-            { method: "DELETE" },
-          );
-          if (!response.ok) {
-            const result = (await response.json().catch(() => ({}))) as { message?: string };
-            throw new Error(result.message ?? "ลบเอกสารไม่สำเร็จ");
-          }
+          await deleteMeetingDocumentRecord(meetingId, document.id);
           await loadMeetings();
           setAlert("ลบเอกสารประกอบการประชุมเรียบร้อยแล้ว");
         } catch (error) {
@@ -821,12 +651,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch(appPath("/api/config"), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(config),
-          });
-          setConfig((await response.json()) as ConfigValues);
+          setConfig(await saveConfigRecord(config));
           setAlert("บันทึกค่าระบบเรียบร้อยแล้ว");
         } finally {
           setLoading(false);
@@ -863,11 +688,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(appPath(editingPersonId ? `/api/internal-people/${editingPersonId}` : "/api/internal-people"), {
-            method: editingPersonId ? "PUT" : "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(personForm),
-          });
+          await saveInternalPersonRecord(editingPersonId, personForm);
           setPersonForm(emptyPerson);
           setEditingPersonId(null);
           await loadSettings();
@@ -886,7 +707,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(appPath(`/api/internal-people/${person.intPid}`), { method: "DELETE" });
+          await deleteInternalPersonRecord(person.intPid);
           if (editingPersonId === person.intPid) {
             setEditingPersonId(null);
             setPersonForm(emptyPerson);
@@ -907,14 +728,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          const response = await fetch(
-            appPath(`/api/meetings/${attendance.meetingId}/attendance/${attendance.id}`),
-            { method: "DELETE" },
-          );
-          if (!response.ok) {
-            const result = (await response.json().catch(() => ({}))) as { message?: string };
-            throw new Error(result.message ?? "ไม่สามารถลบ Attendance ได้");
-          }
+          await deleteAttendanceRecord(attendance.meetingId, attendance.id);
           await loadMeetings();
           setAlert(`ลบ Attendance ลำดับ ${attendance.personNo} เรียบร้อยแล้ว`);
         } catch (error) {
@@ -933,7 +747,7 @@ export function SignMeetingApp() {
         setConfirm(null);
         setLoading(true);
         try {
-          await fetch(appPath(`/api/meetings/${meeting.meetingId}`), { method: "DELETE" });
+          await deleteMeetingRecord(meeting.meetingId);
           setAlert(`ลบ ${meeting.meetingId} แล้ว`);
           setSelectedId("");
           await loadMeetings();
@@ -1050,20 +864,15 @@ export function SignMeetingApp() {
         error={loginError}
         onLogin={async (username, password) => {
           try {
-            const response = await fetch(appPath("/api/auth/login"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ username, password }),
-            });
-            if (!response.ok) {
-              const result = (await response.json().catch(() => ({}))) as { message?: string };
-              setLoginError(result.message ?? "Username หรือ Password ไม่ถูกต้อง");
-              return;
-            }
+            await loginAdmin(username, password);
             setLoginError("");
             setIsAdmin(true);
-          } catch {
-            setLoginError("ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่");
+          } catch (error) {
+            setLoginError(
+              error instanceof Error
+                ? error.message
+                : "ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่",
+            );
           }
         }}
       />
@@ -1163,18 +972,19 @@ export function SignMeetingApp() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img alt="SignMeeting" className="h-20 w-auto rounded-xl object-contain md:h-24" src={appPath("/logosignmeeting1.png")} />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" id="adminToolbar">
             <button
               id="guidedTourButton"
               aria-label="Guided Tour"
               className={iconButtonTone("preview")}
-              onClick={startAdminTour}
+              onClick={() => void startSignMeetingAdminTour()}
               title="Guided Tour"
               type="button"
             >
               <ShieldCheck className="h-5 w-5" />
             </button>
             <button
+              id="settingsButton"
               aria-label="Settings"
               className={iconButtonTone("pdf")}
               onClick={() => setAdminModal("settings")}
@@ -1184,6 +994,7 @@ export function SignMeetingApp() {
               <Settings className="h-5 w-5" />
             </button>
             <button
+              id="internalPeopleButton"
               aria-label="ผู้ปฏิบัติงาน"
               className={iconButtonTone("excel")}
               onClick={() => setAdminModal("people")}
@@ -1193,6 +1004,7 @@ export function SignMeetingApp() {
               <Users className="h-5 w-5" />
             </button>
             <button
+              id="participantGroupsButton"
               aria-label="กลุ่มผู้ร่วมประชุม"
               className={iconButtonTone("edit")}
               onClick={() => setAdminModal("participants")}
@@ -1205,7 +1017,7 @@ export function SignMeetingApp() {
               aria-label="Logout"
               className={iconButtonTone("muted")}
               onClick={async () => {
-                await fetch(appPath("/api/auth/logout"), { method: "POST" }).catch(() => {});
+                await logoutAdmin().catch(() => {});
                 setIsAdmin(false);
               }}
               title="Logout"

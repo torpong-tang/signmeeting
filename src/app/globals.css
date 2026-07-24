@@ -47,6 +47,12 @@ textarea {
   animation: sm-tour-pop 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+@media (max-width: 480px) {
+  .driver-popover.sm-tour {
+    max-width: calc(100vw - 24px);
+  }
+}
+
 @keyframes sm-tour-pop {
   from { opacity: 0; transform: translateY(8px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -130,9 +136,13 @@ textarea {
   gap: 10px;
 }
 .driver-popover.sm-tour .driver-popover-progress-text {
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--sm-accent) 22%, #cbd5e1);
+  border-radius: 999px;
+  background: var(--sm-accent-soft);
   font-size: 0.76rem;
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  color: var(--sm-ink);
 }
 .driver-popover.sm-tour .driver-popover-navigation-btns {
   display: flex;
@@ -184,6 +194,19 @@ textarea {
     0 10px 22px -6px var(--sm-accent),
     0 0 0 4px var(--sm-accent-soft);
 }
+.driver-popover.sm-tour .driver-popover-navigation-btns .driver-popover-next-btn.sm-tour-done {
+  color: #ffffff;
+  background: #059669;
+  border-color: #047857;
+  box-shadow:
+    0 7px 16px -6px rgba(5, 150, 105, 0.8),
+    0 0 0 3px rgba(5, 150, 105, 0.14);
+}
+.driver-popover.sm-tour .driver-popover-navigation-btns button:focus-visible,
+.driver-popover.sm-tour .driver-popover-close-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--sm-accent) 38%, transparent);
+  outline-offset: 2px;
+}
 .driver-popover.sm-tour .driver-popover-close-btn {
   color: #94a3b8;
   font-size: 1.2rem;
@@ -206,5 +229,17 @@ textarea {
 /* Highlighted element gets a soft rounded glow */
 .driver-active-element {
   border-radius: 14px !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.9),
+    0 0 0 7px color-mix(in srgb, #22d3ee 60%, transparent) !important;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .driver-popover.sm-tour {
+    animation: none;
+  }
+
+  .driver-popover.sm-tour .driver-popover-navigation-btns button {
+    transition: none;
+  }
+}

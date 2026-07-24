@@ -118,6 +118,14 @@ export type ConfigValues = {
   close_time?: string;
 };
 
+export type QrItem = {
+  title: string;
+  label: string;
+  groupName: string;
+  groupImageUrl?: string;
+  url: string;
+};
+
 export type MeetingForm = {
   meetingProjectName: string;
   meetingName: string;

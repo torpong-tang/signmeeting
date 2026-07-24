@@ -23,7 +23,10 @@ export function MeetingAttendancePanel({
   onSelect: (meetingId: string) => void;
 }) {
   return (
-    <div className="mt-5 rounded-xl border border-slate-700 bg-slate-950/40 p-4">
+    <div
+      className="mt-5 rounded-xl border border-slate-700 bg-slate-950/40 p-4"
+      id="attendancePanel"
+    >
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-xl font-bold">Attendance</h2>

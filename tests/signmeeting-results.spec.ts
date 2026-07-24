@@ -31,6 +31,84 @@ test.describe("SignMeeting seeded meeting results", () => {
     await expect(rows.first()).toContainText(meetings[0].meetingId);
   });
 
+  test("walks through the complete admin guided tour", async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByAltText("SignMeeting")).toBeVisible();
+    await expect(page.locator("#meetingQrPanel")).toBeVisible();
+    await expect(page.locator("#attendancePanel")).toBeVisible();
+    await page.getByRole("button", { name: "Guided Tour" }).click();
+
+    const popover = page.locator(".driver-popover.sm-tour");
+    const title = popover.locator(".driver-popover-title");
+    const next = popover.locator(".driver-popover-next-btn");
+    const expectedTitles = [
+      "ยินดีต้อนรับสู่ SignMeeting",
+      "เครื่องมือผู้ดูแลระบบ",
+      "ภาพรวมการใช้งาน",
+      "สร้างการประชุมใหม่",
+      "ค้นหาและจัดการการประชุม",
+      "ตั้งค่าระบบ",
+      "ทะเบียนผู้ปฏิบัติงาน",
+      "กลุ่มและรายชื่อผู้ร่วมประชุม",
+      "QR Code สำหรับลงทะเบียน",
+      "Attendance และการส่งออก",
+    ];
+
+    await expect(popover).toBeVisible();
+    await expect(title).toHaveText(expectedTitles[0]);
+    await expect(popover.locator(".driver-popover-progress-text")).toContainText(
+      `1 / ${expectedTitles.length}`,
+    );
+
+    for (const expectedTitle of expectedTitles.slice(1)) {
+      await next.click();
+      await expect(title).toHaveText(expectedTitle);
+    }
+
+    await expect(next).toHaveAttribute("aria-label", "จบ Guided Tour");
+    await next.click();
+    await expect(popover).toBeHidden();
+  });
+
+  test("opens the QR document with the selected meeting details", async ({ page }) => {
+    await loginAsAdmin(page);
+    const meetingsResponse = await page.context().request.get("/api/meetings");
+    expect(meetingsResponse.ok()).toBeTruthy();
+    const meetings = (await meetingsResponse.json()) as Array<{
+      meetingId: string;
+      meetingName: string;
+      meetingProjectName: string;
+      qrUrlExt: string | null;
+      qrUrlInt: string | null;
+    }>;
+    const meeting = meetings.find((item) => item.qrUrlInt || item.qrUrlExt);
+    expect(meeting).toBeTruthy();
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.getByPlaceholder("Live Search...").first().fill(meeting!.meetingId);
+    await page
+      .getByRole("button", {
+        name: `แสดง QR และรายชื่อของ ${meeting!.meetingId}`,
+      })
+      .click();
+
+    const openButton = page.getByRole("button", {
+      name: "Open QR codes in new tab",
+    });
+    await expect(openButton).toBeEnabled();
+    const [qrPage] = await Promise.all([
+      page.waitForEvent("popup"),
+      openButton.click(),
+    ]);
+    await qrPage.waitForLoadState("domcontentloaded");
+    await expect(qrPage.getByText(meeting!.meetingProjectName, { exact: true })).toBeVisible();
+    await expect(qrPage.getByText(meeting!.meetingName, { exact: true })).toBeVisible();
+    await expect(qrPage.getByText(`SignMeeting • ${meeting!.meetingId}`, { exact: true })).toBeVisible();
+    await qrPage.close();
+  });
+
   test("exports attendance PDF in landscape and portrait layouts", async ({ page }) => {
     await loginAsAdmin(page);
     const meetingsResponse = await page.context().request.get("/api/meetings");
@@ -71,11 +149,20 @@ test.describe("SignMeeting seeded meeting results", () => {
       meetingType: "INTERNAL" | "EXTERNAL";
       internalMeetingName: string;
       externalMeetingName: string | null;
+      externalParticipantGroupId: number | null;
       allowLateRegister: boolean;
       updatedAt: string;
       attendances: Array<{ channel: "INTERNAL" | "EXTERNAL" }>;
     }>;
-    const meeting = meetings.find((item) => item.attendances.length > 0);
+    const meeting =
+      meetings.find((item) =>
+        item.attendances.some((row) => row.channel === "INTERNAL"),
+      ) ??
+      meetings.find(
+        (item) =>
+          item.externalParticipantGroupId == null &&
+          item.attendances.some((row) => row.channel === "EXTERNAL"),
+      );
     expect(meeting).toBeTruthy();
     const unchangedPayload = {
       meetingProjectName: meeting!.meetingProjectName,
@@ -87,6 +174,7 @@ test.describe("SignMeeting seeded meeting results", () => {
       meetingType: meeting!.meetingType,
       internalMeetingName: meeting!.internalMeetingName,
       externalMeetingName: meeting!.externalMeetingName ?? "",
+      externalParticipantGroupId: meeting!.externalParticipantGroupId,
       allowLateRegister: meeting!.allowLateRegister,
       expectedUpdatedAt: meeting!.updatedAt,
     };
